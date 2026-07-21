@@ -26,3 +26,4 @@ Task list:
 2. Task 2: Style registry + prompt dispatch
 3. Task 3: Wire style into UI logic (init.js)
 4. Task 4: Style selector markup + styling
+Task 1: complete (commits 1411a22..1c01c13, code verified independently against brief; reviewer approved code, flagged implementer's report text as inaccurate/stale — not a code defect)
