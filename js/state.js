@@ -96,6 +96,14 @@ function migrateData() {
             });
         }
     }
+    // Backfill story style on stored configs that predate the style field.
+    for (const chatId in meta) {
+        const sc = meta[chatId]?.storyConfig;
+        if (sc && typeof sc === 'object' && !sc.style) {
+            sc.style = 'cyoa';
+            changed = true;
+        }
+    }
     if (changed) {
         localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
     }
@@ -120,8 +128,8 @@ const RP_MODELS = {
 
 /** @type {'chat'|'story'} */
 let currentMode = 'chat';
-/** @type {{scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
-let storyConfig = { scene: '', characters: [], tags: '', firstPrompt: '' };
+/** @type {{style:('cyoa'|'roleplay'|'gm'), scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
+let storyConfig = { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
 
 const apiParams = {
     temperature: 0.7,
