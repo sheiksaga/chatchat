@@ -653,7 +653,7 @@
             position: absolute;
             inset: 0;
             border-radius: 50%;
-            background: radial-gradient(circle at 32% 26%, rgba(255,255,255,0.55), transparent 32%);
+            background: radial-gradient(circle at var(--mx, 32%) var(--my, 26%), rgba(255,255,255,0.55), transparent 32%);
             box-shadow: inset -8px -10px 26px rgba(5,12,30,0.6),
                         inset 0 0 24px rgba(127,212,255,0.30);
             pointer-events: none;
@@ -782,14 +782,30 @@
         .story-section-label:first-of-type { margin-top: var(--s-1); }
 
         /* Story style selector: reuse the segmented .config-mode-pills / .mini-pill
-           look but left-align it and let it wrap instead of hugging the right edge. */
+           look but center it and let it wrap instead of hugging the right edge. */
         .story-style-pills {
-            margin-left: 0;
-            margin-bottom: var(--s-2);
+            margin: 0 auto var(--s-2);
             width: fit-content;
             max-width: 100%;
             flex-wrap: wrap;
         }
+        .story-style-pills .mini-pill {
+            transition: background-color 150ms ease-out, color 150ms ease-out, transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .story-style-pills .mini-pill.active {
+            animation: stylePillPop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes stylePillPop {
+            from { transform: scale(0.92); }
+            to   { transform: scale(1); }
+        }
+
+        /* Crossfade wrapper for text that swaps when the story style changes
+           (hero placeholder). Fade out, swap textContent, fade back in. */
+        .style-text-fade {
+            transition: opacity 120ms ease-out;
+        }
+        .style-text-fade.fading { opacity: 0; }
 
         .story-default-wrapper {
             display: flex;

@@ -169,6 +169,21 @@ function setStoryStyle(id) {
     if (typeof refreshHeroSendButton === 'function') refreshHeroSendButton();
 }
 
+/** Crossfade an element's text: fade out, swap textContent, fade back in. */
+function fadeSwapText(el, newText) {
+    if (!el) return;
+    if (el.textContent === newText) return;
+    el.classList.add('style-text-fade');
+    if (el.dataset.fading === '1') { el.textContent = newText; return; }
+    el.dataset.fading = '1';
+    el.classList.add('fading');
+    setTimeout(function() {
+        el.textContent = newText;
+        el.classList.remove('fading');
+        el.dataset.fading = '0';
+    }, 120);
+}
+
 /** Reflect the active story style in the pills, hero placeholder, and first-prompt hint. */
 function syncStoryStyleUI() {
     var active = currentStyle();
@@ -183,7 +198,7 @@ function syncStoryStyleUI() {
     var heroPlaceholder = document.getElementById('hero-placeholder');
     if (heroPlaceholder && currentMode === 'story') {
         var span = heroPlaceholder.querySelector('span:last-child');
-        if (span) span.textContent = storyHeroText();
+        if (span) fadeSwapText(span, storyHeroText());
     }
     // First-prompt textarea hint.
     var fp = document.getElementById('story-first-prompt');
@@ -323,28 +338,16 @@ function saveStoryConfig() {
 function init() {
     migrateData();
 
-    const storedChats = JSON.parse(localStorage.getItem('chat_index') || '[]');
-    if (storedChats.length > 0) {
-        currentChatId = storedChats[storedChats.length - 1];
-        chatHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + currentChatId) || '[]');
-        generationStore = JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + currentChatId) || '{}');
-        generationIdx = {};
-    } else {
-        startNewChat();
-        return;
-    }
+    // Always land on the home screen on load/refresh — a stored chat's
+    // transcript is restored only when the user picks it from the sidebar
+    // (see switchChat in chatlist.js). The chat index still loads normally
+    // so prior chats remain listed there.
+    currentChatId = null;
+    chatHistory = [];
+    generationStore = {};
+    generationIdx = {};
     renderChatList();
-    if (chatHistory.length > 0) {
-        showChatView();
-        renderMessages();
-    } else {
-        showHeroView();
-    }
-
-    // Focus the chat input after restoring a chat session
-    if (chatHistory.length > 0) {
-        document.getElementById('chat-input')?.focus();
-    }
+    showHeroView();
 
     // Wire story config inputs (scene, tags, firstPrompt)
     const sceneEl = document.getElementById('story-scene');
@@ -391,6 +394,31 @@ function initTextareaAutoResize() {
     });
 }
 
+/** Make the orb's specular highlight follow the mouse while it's nearby. */
+function initOrbTracking() {
+    const orb = document.querySelector('.orb');
+    if (!orb) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    document.addEventListener('mousemove', (e) => {
+        const rect = orb.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        const radius = Math.max(rect.width, rect.height) * 3;
+        // Map the cursor offset to a highlight position within a comfortable
+        // band around the orb's default specular spot (32%, 26%), fading the
+        // pull back to the default spot as the cursor moves further away.
+        const pull = 1 - Math.min(dist / radius, 1);
+        const mx = 32 + (dx / radius) * 40 * pull;
+        const my = 26 + (dy / radius) * 40 * pull;
+        orb.style.setProperty('--mx', Math.max(5, Math.min(95, mx)) + '%');
+        orb.style.setProperty('--my', Math.max(5, Math.min(95, my)) + '%');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     marked.setOptions({ breaks: true, gfm: true, renderer: codeRenderer });
     hljs.configure({ cssSelector: 'pre code' });
@@ -400,6 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('chat-input').addEventListener('keydown', handleChatKeydown);
     setupHeroInput();
     initTextareaAutoResize();
+    initOrbTracking();
 });
 
 /* ══════════════════════════════════════════════════════════════
