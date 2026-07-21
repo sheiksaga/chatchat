@@ -3,32 +3,112 @@
    ══════════════════════════════════════════════════════════════ */
 
 /**
- * Build the story mode system prompt from storyConfig.
- * @returns {string}
+ * The formatting convention line shared by every story style.
  */
-function buildStoryPrompt() {
-    const parts = [
-        'You are a creative storytelling AI running in story mode.',
-        'Narrate vividly in second-person ("You stand before...").',
-        'Roleplay all non-player characters with distinct voices.',
-        'NEVER roleplay what the user says, does, thinks, or feels.',
-        'End EVERY response with 2-3 explicit numbered choices.',
-        'Move the story forward based on the user\'s input.',
-        'Maintain consistency with established characters, setting, and plot.',
-        'Format prose with these conventions: spoken dialogue in "double quotes", physical actions and narration wrapped in *asterisks*, and a character\'s inner thoughts wrapped in `backticks`.'
-    ];
-    if (storyConfig.scene) parts.push('\nScene: ' + storyConfig.scene);
-    if (storyConfig.characters && storyConfig.characters.length > 0) {
-        storyConfig.characters.forEach(function(c) {
+const STORY_FORMATTING_LINE = 'Format prose with these conventions: spoken dialogue in "double quotes", physical actions and narration wrapped in *asterisks*, and a character\'s inner thoughts wrapped in `backticks`.';
+
+/**
+ * Emit the config-derived lines (scene, characters, tags, first prompt) shared
+ * by every story style. Order and text match the original CYOA prompt exactly.
+ * @param {object} cfg storyConfig
+ * @returns {string[]}
+ */
+function storyConfigLines(cfg) {
+    const out = [];
+    if (cfg.scene) out.push('\nScene: ' + cfg.scene);
+    if (cfg.characters && cfg.characters.length > 0) {
+        cfg.characters.forEach(function(c) {
             if (!c.name) return;
             var line = 'Character \u2014 ' + c.name + ': ' + (c.traits || 'unknown');
             if (c.role && c.role.trim()) line += '. Role: ' + c.role.trim();
-            parts.push(line);
+            out.push(line);
         });
     }
-    if (storyConfig.tags) parts.push('Tags/Genre: ' + storyConfig.tags);
-    if (storyConfig.firstPrompt) parts.push('\n' + storyConfig.firstPrompt);
-    return parts.join('\n');
+    if (cfg.tags) out.push('Tags/Genre: ' + cfg.tags);
+    if (cfg.firstPrompt) out.push('\n' + cfg.firstPrompt);
+    return out;
+}
+
+/**
+ * Registry of story styles. Each entry owns its system-prompt instructions but
+ * shares the config-lines scaffold and formatting convention.
+ */
+const STORY_STYLES = {
+    cyoa: {
+        label: 'Adventure',
+        hero: 'What do you do?',
+        buildPrompt: function(cfg) {
+            var parts = [
+                'You are a creative storytelling AI running in story mode.',
+                'Narrate vividly in second-person ("You stand before...").',
+                'Roleplay all non-player characters with distinct voices.',
+                'NEVER roleplay what the user says, does, thinks, or feels.',
+                'End EVERY response with 2-3 explicit numbered choices.',
+                'Move the story forward based on the user\'s input.',
+                'Maintain consistency with established characters, setting, and plot.',
+                STORY_FORMATTING_LINE
+            ];
+            return parts.concat(storyConfigLines(cfg)).join('\n');
+        }
+    },
+    roleplay: {
+        label: 'Roleplay',
+        hero: 'What do you do or say?',
+        buildPrompt: function(cfg) {
+            var parts = [
+                'You are a masterful roleplay partner running in story mode.',
+                'The FIRST character listed below is your lead character \u2014 speak and act as them in first person, in character. Voice every other listed character as an NPC when the scene calls for it.',
+                'Set the scene, then keep track of who is present, the location, and the mood as the story unfolds.',
+                'The user may either DIRECT the scene from outside (e.g. "move toward the cockpit", "we are now in the schoolyard") OR speak and act in character. Interpret which they mean and respond accordingly.',
+                'NEVER narrate the user\'s own words, actions, thoughts, or feelings for them.',
+                'Do NOT present numbered choices \u2014 continue the scene naturally and leave room for the user to act.',
+                'Maintain consistency with established characters, setting, and plot.',
+                STORY_FORMATTING_LINE
+            ];
+            return parts.concat(storyConfigLines(cfg)).join('\n');
+        }
+    },
+    gm: {
+        label: 'Game Master',
+        hero: 'What do you do?',
+        buildPrompt: function(cfg) {
+            var parts = [
+                'You are a skilled game master (GM) running an interactive scene in story mode.',
+                'Describe the world vividly, voice every non-player character with a distinct personality, and keep the world consistent and reactive.',
+                'The FIRST character listed below is the user\'s player character; every other listed character is an NPC you control.',
+                'When the user attempts something with an uncertain outcome, narrate a plausible result WITH consequences \u2014 success, partial success, or complication \u2014 instead of always letting them succeed. Use narrative judgment only; do NOT roll dice or use numeric stats.',
+                'NEVER decide the player character\'s choices, words, or feelings for them.',
+                'Do NOT present numbered choices \u2014 react to what the user does.',
+                'Maintain consistency with established characters, setting, and plot.',
+                STORY_FORMATTING_LINE
+            ];
+            return parts.concat(storyConfigLines(cfg)).join('\n');
+        }
+    }
+};
+
+/**
+ * Resolve the active, valid story style id (defaults to 'cyoa').
+ * @returns {'cyoa'|'roleplay'|'gm'}
+ */
+function currentStyle() {
+    return (storyConfig && STORY_STYLES[storyConfig.style]) ? storyConfig.style : 'cyoa';
+}
+
+/**
+ * The hero-input placeholder text for the active story style.
+ * @returns {string}
+ */
+function storyHeroText() {
+    return STORY_STYLES[currentStyle()].hero;
+}
+
+/**
+ * Build the story mode system prompt for the active style.
+ * @returns {string}
+ */
+function buildStoryPrompt() {
+    return STORY_STYLES[currentStyle()].buildPrompt(storyConfig);
 }
 
 /**
