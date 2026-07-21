@@ -28,3 +28,4 @@ Task list:
 4. Task 4: Style selector markup + styling
 Task 1: complete (commits 1411a22..1c01c13, code verified independently against brief; reviewer approved code, flagged implementer's report text as inaccurate/stale — not a code defect)
 Task 2: complete (commits 8bb5dca..769f560, reviewer approved, CYOA byte-identical verified by inspection)
+Task 3: complete (commits 9c5d0f8..20762bc, reviewer approved, no issues)
