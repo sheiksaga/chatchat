@@ -781,6 +781,16 @@
         }
         .story-section-label:first-of-type { margin-top: var(--s-1); }
 
+        /* Story style selector: reuse the segmented .config-mode-pills / .mini-pill
+           look but left-align it and let it wrap instead of hugging the right edge. */
+        .story-style-pills {
+            margin-left: 0;
+            margin-bottom: var(--s-2);
+            width: fit-content;
+            max-width: 100%;
+            flex-wrap: wrap;
+        }
+
         .story-default-wrapper {
             display: flex;
             justify-content: center;

@@ -186,6 +186,12 @@
 
                 <!-- Story config (hidden in chat mode) -->
                 <div class="story-config hidden" id="story-config">
+                    <div class="story-section-label">Style</div>
+                    <div class="config-mode-pills story-style-pills" role="group" aria-label="Story style">
+                        <button type="button" class="mini-pill active" id="style-pill-cyoa" onclick="setStoryStyle('cyoa')" aria-pressed="true">Adventure</button>
+                        <button type="button" class="mini-pill" id="style-pill-roleplay" onclick="setStoryStyle('roleplay')" aria-pressed="false">Roleplay</button>
+                        <button type="button" class="mini-pill" id="style-pill-gm" onclick="setStoryStyle('gm')" aria-pressed="false">Game Master</button>
+                    </div>
                     <!-- Use Default pill -->
                     <div class="story-default-wrapper" id="story-default-wrapper">
                         <button class="quick-chip story-default-pill" id="story-default-pill" onclick="useDefaultStory()">
