@@ -39,6 +39,8 @@ function renderStoryConfig() {
             });
         });
     }
+
+    syncStoryStyleUI();
 }
 
 /** Minimal HTML escape helper */
@@ -62,13 +64,20 @@ function removeCharacterRow(index) {
 }
 
 function useDefaultStory() {
+    var style = currentStyle();
+    var firstPrompts = {
+        cyoa: 'Begin the story. Describe the opening scene vividly and present 2-3 clear choices for what happens next.',
+        roleplay: 'Set the scene, then open in character as your lead character. Leave room for me to respond.',
+        gm: 'Set up the opening situation as game master, then ask what I do.'
+    };
     storyConfig = {
+        style: style,
         scene: 'A misty forest at twilight. Ancient trees loom overhead, and a narrow path winds deeper into the unknown.',
         characters: [
             { name: 'The Guide', traits: 'mysterious, wise, speaks in riddles', role: 'Enigmatic mentor' }
         ],
         tags: 'fantasy, mystery, adventure',
-        firstPrompt: 'Begin the story. Describe the opening scene vividly and present 2-3 clear choices for what happens next.'
+        firstPrompt: firstPrompts[style] || firstPrompts.cyoa
     };
     renderStoryConfig();
     saveStoryConfig();
@@ -106,7 +115,13 @@ async function generateStory() {
     var pill = document.getElementById('story-generate-pill');
     if (pill) { pill.disabled = true; pill.classList.add('is-loading'); }
     try {
-        var sys = 'You are a creative writing assistant. Invent a completely original interactive-fiction premise. Respond with ONLY a JSON object — no prose, no code fences — with exactly these keys: "setting" (a vivid 1-2 sentence setting), "characters" (array of 2-4 objects, each with "name", "traits", and "role"), "tags" (comma-separated genres), "firstPrompt" (a short instruction that kicks off the story).';
+        var styleId = currentStyle();
+        var styleHints = {
+            cyoa: 'The firstPrompt should tell the AI to describe the opening scene and present 2-3 numbered choices.',
+            roleplay: 'The firstPrompt should tell the AI to set the scene and open in character as the first-listed character, leaving room for the user to respond (no numbered choices).',
+            gm: 'The firstPrompt should tell the AI, acting as game master, to set up the opening situation and ask the player what they do (no numbered choices).'
+        };
+        var sys = 'You are a creative writing assistant. Invent a completely original interactive-fiction premise. Respond with ONLY a JSON object — no prose, no code fences — with exactly these keys: "setting" (a vivid 1-2 sentence setting), "characters" (array of 2-4 objects, each with "name", "traits", and "role"), "tags" (comma-separated genres), "firstPrompt" (a short instruction that kicks off the story). ' + (styleHints[styleId] || styleHints.cyoa);
         var user = 'Generate a fresh, random story configuration now as JSON.';
         var response = await fetch(API_BASE + '/chat/completions', {
             method: 'POST',
@@ -123,6 +138,7 @@ async function generateStory() {
         var parsed = parseStoryJson(data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content);
         if (!parsed) throw new Error('could not parse story JSON');
         storyConfig = {
+            style: styleId,
             scene: typeof parsed.setting === 'string' ? parsed.setting : (parsed.scene || ''),
             characters: Array.isArray(parsed.characters)
                 ? parsed.characters.map(function(c) { return { name: (c && c.name) || '', traits: (c && c.traits) || '', role: (c && c.role) || '' }; })
@@ -138,6 +154,46 @@ async function generateStory() {
         showToast('Generate failed: ' + err.message, 'error');
     } finally {
         if (pill) { pill.disabled = false; pill.classList.remove('is-loading'); }
+    }
+}
+
+/**
+ * Set the active story style, persist it, and refresh style-dependent UI.
+ * @param {'cyoa'|'roleplay'|'gm'} id
+ */
+function setStoryStyle(id) {
+    if (!STORY_STYLES[id]) return;
+    storyConfig.style = id;
+    saveStoryConfig();
+    syncStoryStyleUI();
+    if (typeof refreshHeroSendButton === 'function') refreshHeroSendButton();
+}
+
+/** Reflect the active story style in the pills, hero placeholder, and first-prompt hint. */
+function syncStoryStyleUI() {
+    var active = currentStyle();
+    ['cyoa', 'roleplay', 'gm'].forEach(function(id) {
+        var pill = document.getElementById('style-pill-' + id);
+        if (pill) {
+            pill.classList.toggle('active', id === active);
+            pill.setAttribute('aria-pressed', String(id === active));
+        }
+    });
+    // Hero placeholder (only meaningful while the hero view is in story mode).
+    var heroPlaceholder = document.getElementById('hero-placeholder');
+    if (heroPlaceholder && currentMode === 'story') {
+        var span = heroPlaceholder.querySelector('span:last-child');
+        if (span) span.textContent = storyHeroText();
+    }
+    // First-prompt textarea hint.
+    var fp = document.getElementById('story-first-prompt');
+    if (fp) {
+        var hints = {
+            cyoa: 'Describe the opening scene and present the first choices for the player.',
+            roleplay: 'Set the opening scene and have your lead character open, in character.',
+            gm: 'Set up the opening situation and prompt the player for their first action.'
+        };
+        fp.placeholder = hints[active] || hints.cyoa;
     }
 }
 
@@ -181,7 +237,7 @@ function setMode(mode) {
         renderStoryConfig();
         if (heroPlaceholder) {
             const span = heroPlaceholder.querySelector('span:last-child');
-            if (span) span.textContent = 'What do you do?';
+            if (span) span.textContent = storyHeroText();
         }
         if (cfgStory) { cfgStory.classList.add('active'); cfgStory.setAttribute('aria-pressed', 'true'); }
         if (cfgChat) { cfgChat.classList.remove('active'); cfgChat.setAttribute('aria-pressed', 'false'); }
@@ -353,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function exportStoryConfig(format) {
     var dateStr = new Date().toISOString().slice(0, 10);
     if (format === 'json') {
-        var data = { scene: storyConfig.scene, characters: storyConfig.characters, tags: storyConfig.tags, firstPrompt: storyConfig.firstPrompt, exportedAt: new Date().toISOString() };
+        var data = { style: currentStyle(), scene: storyConfig.scene, characters: storyConfig.characters, tags: storyConfig.tags, firstPrompt: storyConfig.firstPrompt, exportedAt: new Date().toISOString() };
         var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
@@ -372,6 +428,7 @@ function exportStoryConfig(format) {
             })
             .join('\n');
         var text = [
+            'Style: ' + STORY_STYLES[currentStyle()].label,
             'Scene: ' + (storyConfig.scene || ''),
             '',
             'Characters:',
@@ -406,6 +463,7 @@ function handleStoryImport(input) {
             if (file.name.endsWith('.json')) {
                 var data = JSON.parse(e.target.result);
                 storyConfig = {
+                    style: STORY_STYLES[data.style] ? data.style : 'cyoa',
                     scene: data.scene || '',
                     characters: Array.isArray(data.characters)
                         ? data.characters.map(function(c) { return { name: c.name || '', traits: c.traits || '', role: c.role || '' }; })
@@ -415,7 +473,7 @@ function handleStoryImport(input) {
                 };
             } else {
                 var text = e.target.result;
-                storyConfig = { scene: '', characters: [], tags: '', firstPrompt: '' };
+                storyConfig = { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
                 var firstPromptLines = [];
                 var inFirstPrompt = false;
                 text.split('\n').forEach(function(line) {
