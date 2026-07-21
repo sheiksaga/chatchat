@@ -1,0 +1,421 @@
+/* ══════════════════════════════════════════════════════════════
+   messages.js — Message rendering, markdown, toolbar builder
+   ══════════════════════════════════════════════════════════════ */
+
+const codeRenderer = new marked.Renderer();
+codeRenderer.code = function(code, language) {
+    const escapedCode = code.replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#039;');
+    // No inline onclick here — a delegated listener handles copies. Inline handlers
+    // would be stripped by DOMPurify (see renderMarkdown) and never fire.
+    return `<div class="code-block-wrapper">
+        <div class="code-block-header">
+            <span class="code-block-lang">${language || 'code'}</span>
+            <button class="btn-copy-code" type="button">Copy</button>
+        </div>
+        <pre><code>${escapedCode}</code></pre>
+    </div>`;
+};
+
+// Delegated copy-to-clipboard for code blocks (survives DOMPurify sanitization).
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest && e.target.closest('.btn-copy-code');
+    if (!btn) return;
+    const codeEl = btn.closest('.code-block-wrapper')?.querySelector('pre code');
+    if (!codeEl) return;
+    try {
+        await navigator.clipboard.writeText(codeEl.textContent);
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+            btn.textContent = 'Copy';
+            btn.classList.remove('copied');
+        }, 2000);
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+    }
+});
+
+/**
+ * Render markdown content to sanitized HTML.
+ * @param {string} content - Raw markdown text
+ * @returns {string} Sanitized HTML string
+ */
+function renderMarkdown(content) {
+    if (!content) return '';
+    const html = marked.parse(content);
+    // Model/user text is rendered via innerHTML — sanitize to neutralize injected
+    // markup (e.g. <img onerror>). Falls back to raw HTML only if DOMPurify is absent.
+    return (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html) : html;
+}
+
+/**
+ * Wrap quoted speech runs ("..." or curly quotes) in <span class="story-speech">,
+ * skipping code/pre and already-wrapped spans. Operates on text nodes only.
+ */
+function wrapSpeechInNode(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const targets = [];
+    let node;
+    while ((node = walker.nextNode())) {
+        if (node.parentElement && node.parentElement.closest('code, pre, .story-speech')) continue;
+        if (/[“"][^“”"]+[”"]/.test(node.nodeValue)) targets.push(node);
+    }
+    targets.forEach(textNode => {
+        const frag = document.createDocumentFragment();
+        const parts = textNode.nodeValue.split(/([“"][^“”"]+[”"])/g);
+        parts.forEach(part => {
+            if (part && /^[“"][^“”"]+[”"]$/.test(part)) {
+                const span = document.createElement('span');
+                span.className = 'story-speech';
+                span.textContent = part;
+                frag.appendChild(span);
+            } else if (part) {
+                frag.appendChild(document.createTextNode(part));
+            }
+        });
+        textNode.parentNode.replaceChild(frag, textNode);
+    });
+}
+
+/**
+ * Apply story-mode text styling to a rendered assistant message element.
+ * Speech = quotes, actions = *asterisks* (<em>), thoughts = `backticks` (inline <code>).
+ */
+function applyStoryFormatting(el) {
+    if (!el) return;
+    el.querySelectorAll('em').forEach(n => n.classList.add('story-action'));
+    el.querySelectorAll('code').forEach(n => { if (!n.closest('pre')) n.classList.add('story-thought'); });
+    wrapSpeechInNode(el);
+}
+
+function addMessageToolbar(div, msgIndex) {
+    const alts = generationStore[msgIndex] || [];
+    // The list now holds every generation for this slot, so >1 means alternatives exist.
+    const hasAlts = alts.length > 1;
+    let curIdx = generationIdx[msgIndex];
+    if (curIdx === undefined) curIdx = alts.length ? alts.length - 1 : 0;
+    const toolbar = document.createElement('div');
+    toolbar.className = 'msg-toolbar';
+    toolbar.setAttribute('role', 'toolbar');
+    toolbar.setAttribute('aria-label', 'Message actions');
+
+    // Regenerate button
+    const regenBtn = document.createElement('button');
+    regenBtn.setAttribute('aria-label', 'Regenerate response');
+    regenBtn.title = 'Regenerate';
+    regenBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/></svg>';
+    regenBtn.onclick = () => regenerateMessage(msgIndex);
+    toolbar.appendChild(regenBtn);
+
+    if (hasAlts) {
+        const prevBtn = document.createElement('button');
+        prevBtn.setAttribute('aria-label', 'Previous generation');
+        prevBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+        prevBtn.onclick = (e) => { e.stopPropagation(); cycleGeneration(msgIndex, -1); };
+        toolbar.appendChild(prevBtn);
+
+        const count = document.createElement('span');
+        count.className = 'gen-count';
+        count.setAttribute('aria-label', `Generation ${curIdx + 1} of ${alts.length}`);
+        count.textContent = `${curIdx + 1}/${alts.length}`;
+        toolbar.appendChild(count);
+
+        const nextBtn = document.createElement('button');
+        nextBtn.setAttribute('aria-label', 'Next generation');
+        nextBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+        nextBtn.onclick = (e) => { e.stopPropagation(); cycleGeneration(msgIndex, 1); };
+        toolbar.appendChild(nextBtn);
+    }
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.setAttribute('aria-label', 'Delete this message pair');
+    deleteBtn.title = 'Delete message';
+    deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+    deleteBtn.onclick = (e) => { e.stopPropagation(); deleteMessage(msgIndex); };
+    toolbar.appendChild(deleteBtn);
+    div.appendChild(toolbar);
+}
+
+function addUserMessageToolbar(div, msgIndex) {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'msg-toolbar';
+    toolbar.setAttribute('role', 'toolbar');
+    toolbar.setAttribute('aria-label', 'Message actions');
+    const editBtn = document.createElement('button');
+    editBtn.setAttribute('aria-label', 'Edit message');
+    editBtn.title = 'Edit message';
+    editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+    editBtn.onclick = () => editMessage(msgIndex);
+    toolbar.appendChild(editBtn);
+    div.appendChild(toolbar);
+}
+
+function renderMessages() {
+    const messagesEl = document.getElementById('messages');
+    messagesEl.innerHTML = '';
+
+    if (chatHistory.length === 0) {
+        showHeroView();
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    for (let i = 0; i < chatHistory.length; i++) {
+        const msg = chatHistory[i];
+        const div = document.createElement('div');
+        div.className = `message ${msg.role}`;
+        if (msg.role === 'assistant') {
+            div.innerHTML = renderMarkdown(msg.content || '');
+            // Apply syntax highlighting to code blocks
+            div.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+            addMessageToolbar(div, i);
+            if (currentMode === 'story') applyStoryFormatting(div);
+        } else {
+            div.textContent = msg.content;
+            addUserMessageToolbar(div, i);
+        }
+        fragment.appendChild(div);
+    }
+
+    messagesEl.appendChild(fragment);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/**
+ * Save generation alternatives to localStorage.
+ */
+function saveGenerations() {
+    if (currentChatId) {
+        localStorage.setItem(GENERATIONS_PREFIX + currentChatId, JSON.stringify(generationStore));
+    }
+}
+
+function editMessage(index) {
+    const msg = chatHistory[index];
+    if (!msg || msg.role !== 'user') return;
+    const messagesEl = document.getElementById('messages');
+    const div = messagesEl.children[index];
+    const original = msg.content;
+
+    // Build textarea
+    const ta = document.createElement('textarea');
+    ta.value = original;
+    ta.className = 'edit-textarea';
+    // Remove toolbar while editing
+    const toolbar = div.querySelector('.msg-toolbar');
+    if (toolbar) toolbar.remove();
+    div.textContent = '';
+    div.appendChild(ta);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    let saved = false;
+    const save = async () => {
+        if (saved) return;
+        saved = true;
+        const val = ta.value.trim();
+        if (val) {
+            chatHistory[index].content = val;
+            // Truncate everything after this user message (old assistant response is now stale)
+            if (index + 1 < chatHistory.length) {
+                for (let j = index + 1; j < chatHistory.length; j++) {
+                    delete generationStore[j];
+                    delete generationIdx[j];
+                }
+                chatHistory = chatHistory.slice(0, index + 1);
+                saveGenerations();
+            }
+            localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+        }
+        renderMessages();
+        // Auto-generate new response for the edited prompt
+        if (val && chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'user') {
+            await generateResponseForHistory();
+            renderMessages();
+        }
+    };
+
+    ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+        else if (e.key === 'Escape') { e.preventDefault(); saved = true; div.textContent = original; }
+    });
+    ta.addEventListener('blur', () => save());
+}
+
+function deleteMessage(index) {
+    const msg = chatHistory[index];
+    if (!msg || msg.role !== 'assistant') return;
+    // Delete the assistant + the user message that triggered it
+    const delStart = index > 0 && chatHistory[index - 1].role === 'user' ? index - 1 : index;
+    const delCount = (delStart === index - 1) ? 2 : 1;
+    chatHistory.splice(delStart, delCount);
+
+    // Shift generation store/index to fill the hole
+    const newStore = {};
+    const newIdx = {};
+    for (const key in generationStore) {
+        const k = parseInt(key);
+        if (k < delStart) { newStore[k] = generationStore[k]; newIdx[k] = generationIdx[k] || 0; }
+        else if (k >= delStart + delCount) { newStore[k - delCount] = generationStore[k]; newIdx[k - delCount] = generationIdx[k] || 0; }
+    }
+    for (const key in generationStore) delete generationStore[key];
+    Object.assign(generationStore, newStore);
+    for (const key in generationIdx) delete generationIdx[key];
+    Object.assign(generationIdx, newIdx);
+
+    localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+    saveGenerations();
+    renderMessages();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Export / Import — backup and restore all chats
+   ══════════════════════════════════════════════════════════════ */
+
+/** Download all chats as a JSON file */
+function exportChats() {
+    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const data = {
+        version: DATA_VERSION,
+        exportedAt: new Date().toISOString(),
+        chats: {},
+        meta: meta,
+        index: chats
+    };
+    chats.forEach(id => {
+        data.chats[id] = {
+            history: JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + id) || '[]'),
+            generations: JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + id) || '{}')
+        };
+    });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Chats exported successfully', 'success');
+}
+
+/** Import chats from a JSON file */
+function importChats(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.chats || !data.index) throw new Error('Invalid backup format');
+
+            // Merge into existing storage (don't overwrite existing chats with same ID)
+            const existing = JSON.parse(localStorage.getItem('chat_index') || '[]');
+            data.index.forEach(id => {
+                if (!existing.includes(id)) {
+                    existing.push(id);
+                    if (data.chats[id]) {
+                        if (data.chats[id].history) {
+                            localStorage.setItem(STORAGE_KEY_PREFIX + id, JSON.stringify(data.chats[id].history));
+                        }
+                        if (data.chats[id].generations) {
+                            localStorage.setItem(GENERATIONS_PREFIX + id, JSON.stringify(data.chats[id].generations));
+                        }
+                    }
+                }
+            });
+            localStorage.setItem('chat_index', JSON.stringify(existing));
+            if (data.meta) {
+                const existingMeta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+                const merged = { ...data.meta, ...existingMeta };
+                localStorage.setItem(CHAT_META_KEY, JSON.stringify(merged));
+            }
+            showToast('Chats imported successfully', 'success');
+            // Reload to pick up imported chats
+            if (existing.length > 0) {
+                currentChatId = existing[existing.length - 1];
+                chatHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + currentChatId) || '[]');
+                generationStore = JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + currentChatId) || '{}');
+                generationIdx = {};
+            }
+            renderChatList();
+            if (chatHistory.length > 0) {
+                showChatView();
+                renderMessages();
+            } else {
+                showHeroView();
+            }
+        } catch (err) {
+            showToast(`Import failed: ${err.message}`, 'error');
+        }
+    };
+    reader.readAsText(file);
+}
+
+/** Open the hidden file picker for importing chats (sidebar Import button). */
+function triggerChatImport() {
+    document.getElementById('chat-import-input').click();
+}
+
+/** Handle a file chosen via the sidebar Import button. */
+function handleChatImport(input) {
+    const file = input.files[0];
+    if (file) importChats(file);
+    input.value = '';
+}
+
+/**
+ * Announce a completed assistant response to the screen-reader live region.
+ * Called once per finished message (not per streamed token) to avoid SR spam.
+ * @param {string} text
+ */
+function announceToSR(text) {
+    const el = document.getElementById('sr-announcer');
+    if (!el || !text) return;
+    // Cap length so very long replies don't overwhelm the announcement.
+    el.textContent = text.length > 600 ? text.slice(0, 600) + '…' : text;
+}
+
+/**
+ * Show a toast notification.
+ * @param {string} message
+ * @param {string} [type] - 'success' | 'error' | ''
+ * @param {{actionLabel?:string, onAction?:Function, duration?:number}} [options]
+ *        When actionLabel/onAction are provided, an action button (e.g. Undo) is shown
+ *        and the toast persists for `duration` ms (default 6000) under JS control.
+ */
+function showToast(message, type, options) {
+    const toast = document.createElement('div');
+    const opts = options || {};
+    const hasAction = opts.actionLabel && typeof opts.onAction === 'function';
+    // Action toasts (undo, etc.) surface at top-center; plain toasts sit bottom-right.
+    const container = document.getElementById(hasAction ? 'toast-top-container' : 'toast-container');
+
+    if (hasAction) {
+        toast.className = `toast toast-action toast-${type || ''}`;
+        const msg = document.createElement('span');
+        msg.className = 'toast-message';
+        msg.textContent = message;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'toast-action-btn';
+        btn.textContent = opts.actionLabel;
+        const dismiss = () => { if (toast.parentElement) toast.remove(); };
+        const timer = setTimeout(dismiss, opts.duration || 6000);
+        btn.onclick = () => { clearTimeout(timer); dismiss(); opts.onAction(); };
+        toast.appendChild(msg);
+        toast.appendChild(btn);
+        container.appendChild(toast);
+        return;
+    }
+
+    toast.className = `toast toast-${type || ''}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
