@@ -16,3 +16,13 @@ Task 4: complete (renderStoryConfig, add/remove character rows, useDefaultStory,
 Task 5: complete (switchChat storyConfig default + UI sync)
 Task 6: complete (buildStoryPrompt uses char array + firstPrompt, compressHistory uses char names)
 Task 8: complete (verified all cross-file references, found & fixed text import First Prompt bug)
+
+---
+
+# Story Styles Plan (docs/superpowers/plans/2026-07-21-story-styles.md)
+
+Task list:
+1. Task 1: Add style to data model + migration
+2. Task 2: Style registry + prompt dispatch
+3. Task 3: Wire style into UI logic (init.js)
+4. Task 4: Style selector markup + styling
