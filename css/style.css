@@ -753,9 +753,10 @@
             pointer-events: none;
         }
         .story-config-input {
+            width: 100%;
             height: 36px;
             padding: 0 14px;
-            border-radius: var(--radius-pill);
+            border-radius: var(--radius-md);
             background: var(--panel-bg);
             border: 1px solid var(--stroke);
             color: var(--text);
