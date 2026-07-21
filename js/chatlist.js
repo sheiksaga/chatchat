@@ -83,7 +83,7 @@ function switchChat(chatId) {
     generationIdx = {};
     // Load story config and mode for this chat
     const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
-    storyConfig = meta[chatId]?.storyConfig || { scene: '', characters: [], tags: '', firstPrompt: '' };
+    storyConfig = meta[chatId]?.storyConfig || { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
     currentMode = meta[chatId]?.lastMode || 'chat';
     renderChatList();
     // Sync mode UI if hero is visible
@@ -159,12 +159,12 @@ function deleteChat(chatId) {
             generationIdx = {};
             // Load the fallback chat's story config / mode instead of keeping the deleted chat's
             const meta2 = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
-            storyConfig = meta2[currentChatId]?.storyConfig || { scene: '', characters: [], tags: '', firstPrompt: '' };
+            storyConfig = meta2[currentChatId]?.storyConfig || { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
             currentMode = meta2[currentChatId]?.lastMode || 'chat';
         } else {
             chatHistory = [];
             currentChatId = null;
-            storyConfig = { scene: '', characters: [], tags: '', firstPrompt: '' };
+            storyConfig = { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
             currentMode = 'chat';
         }
         if (chatHistory.length > 0) {

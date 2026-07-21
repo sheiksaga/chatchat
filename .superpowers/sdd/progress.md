@@ -30,3 +30,5 @@ Task 1: complete (commits 1411a22..1c01c13, code verified independently against 
 Task 2: complete (commits 8bb5dca..769f560, reviewer approved, CYOA byte-identical verified by inspection)
 Task 3: complete (commits 9c5d0f8..20762bc, reviewer approved, no issues)
 Task 4: complete (commits f51126b..bc90b9c, reviewer approved, no issues)
+
+Final whole-branch review: approved with one Minor fix applied — js/chatlist.js:86,162,167 storyConfig reset literals now include style:'cyoa' (spec §4 said "all reset points updated"; plan's affected-files list had omitted chatlist.js). Harmless before the fix due to currentStyle() defensive fallback; now fully consistent. Feature complete: Adventure/Roleplay/Game Master styles wired end-to-end, CYOA verified byte-identical, backward-compatible with old exports/chats.
