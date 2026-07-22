@@ -294,7 +294,12 @@ function showOfflineBanner() {
     if (offlineBanner) return;
     offlineBanner = document.createElement('div');
     offlineBanner.className = 'offline-banner';
-    offlineBanner.textContent = '\u26A0 ' + currentProvider().label + ' is unreachable';
+    const icon = document.createElement('span');
+    icon.className = 'offline-banner-icon';
+    icon.textContent = '\u26A0';
+    const text = document.createElement('span');
+    text.textContent = currentProvider().label + ' is unreachable';
+    offlineBanner.append(icon, text);
     document.body.prepend(offlineBanner);
 }
 

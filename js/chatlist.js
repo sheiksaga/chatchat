@@ -216,22 +216,55 @@ function restoreDeletedChat(snap) {
 /**
  * Delete all chats after user confirmation.
  */
+function showConfirmDialog(message, { confirmLabel = 'Confirm', onConfirm }) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-dialog-overlay';
+    const dialog = document.createElement('div');
+    dialog.className = 'confirm-dialog';
+    const msg = document.createElement('div');
+    msg.className = 'confirm-dialog-message';
+    msg.textContent = message;
+    const actions = document.createElement('div');
+    actions.className = 'confirm-dialog-actions';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'confirm-dialog-cancel';
+    cancelBtn.textContent = 'Cancel';
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'confirm-dialog-confirm';
+    confirmBtn.textContent = confirmLabel;
+    const close = () => overlay.remove();
+    cancelBtn.onclick = close;
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    confirmBtn.onclick = () => { close(); onConfirm(); };
+    actions.append(cancelBtn, confirmBtn);
+    dialog.append(msg, actions);
+    overlay.append(dialog);
+    document.body.append(overlay);
+    confirmBtn.focus();
+}
+
 function deleteAllChats() {
-    if (!confirm('Delete all chats? This cannot be undone.')) return;
-    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
-    chats.forEach(id => {
-        localStorage.removeItem(STORAGE_KEY_PREFIX + id);
-        localStorage.removeItem(GENERATIONS_PREFIX + id);
+    showConfirmDialog('Delete all chats? This cannot be undone.', {
+        confirmLabel: 'Delete All',
+        onConfirm: () => {
+            const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+            chats.forEach(id => {
+                localStorage.removeItem(STORAGE_KEY_PREFIX + id);
+                localStorage.removeItem(GENERATIONS_PREFIX + id);
+            });
+            localStorage.setItem('chat_index', '[]');
+            localStorage.removeItem(CHAT_META_KEY);
+            currentChatId = null;
+            chatHistory = [];
+            generationStore = {};
+            generationIdx = {};
+            renderChatList();
+            showHeroView();
+            document.getElementById('messages').innerHTML = '';
+        }
     });
-    localStorage.setItem('chat_index', '[]');
-    localStorage.removeItem(CHAT_META_KEY);
-    currentChatId = null;
-    chatHistory = [];
-    generationStore = {};
-    generationIdx = {};
-    renderChatList();
-    showHeroView();
-    document.getElementById('messages').innerHTML = '';
 }
 
 /**

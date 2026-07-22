@@ -10,11 +10,10 @@
 
             /* 3.1 Surface */
             --bg-deep: #04060E;
-            --shell-bg: #0A0F1C;
-            --sidebar-bg: #0D1424;
-            --panel-bg: #0F1828;
-            --panel-bg-hover: #142033;
-            --topbar-bg: #0C1322;
+            --shell-bg: rgba(10,15,28,0.86);
+            --sidebar-bg: rgba(13,20,36,0.86);
+            --panel-bg: rgba(15,24,40,0.90);
+            --panel-bg-hover: rgba(20,32,51,0.92);
 
             /* 3.2 Accent — BLUE */
             --accent: #4A8CFF;
@@ -43,8 +42,8 @@
             --danger: #E66A7A;
 
             /* 4. Typography */
-            --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-            --font-display: -apple-system, BlinkMacSystemFont, "Inter Display", "SF Pro Display", "Helvetica Neue", sans-serif;
+            --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            --font-display: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
             --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
             --text-xs: 11px; --lh-xs: 16px;
@@ -622,6 +621,7 @@
             padding: var(--s-8) var(--s-5);
             gap: var(--s-6);
             min-height: 60vh;
+            overflow-y: auto;
         }
         .hero-region.hidden { display: none; }
 
@@ -629,6 +629,7 @@
         .orb {
             position: relative;
             width: 96px; height: 96px;
+            flex-shrink: 0;
             border-radius: 50%;
             overflow: hidden;
             background: radial-gradient(circle at 35% 30%,
@@ -674,6 +675,7 @@
             gap: var(--s-2);
             flex-wrap: wrap;
             justify-content: center;
+            flex-shrink: 0;
         }
         .quick-chip {
             height: 36px;
@@ -733,6 +735,7 @@
         .story-config {
             display: flex;
             flex-direction: column;
+            flex-shrink: 0;
             gap: var(--s-2);
             width: 100%;
             max-width: 720px;
@@ -744,6 +747,11 @@
                         margin 250ms ease-out;
             margin-bottom: var(--s-2);
         }
+        /* Direct children must not be individually flex-shrunk below their intended
+           size — that's what was crushing 36px inputs down to ~18px whenever the
+           panel's content exceeded the viewport. The container's own overflow-y:auto
+           (below) is what should absorb any overflow, not per-field squashing. */
+        .story-config > * { flex-shrink: 0; }
         /* When expanded, let overly tall content scroll instead of being clipped. */
         .story-config:not(.hidden) { overflow-y: auto; }
         .story-config.hidden {
@@ -1559,6 +1567,11 @@
             }
             .message.assistant .msg-toolbar { left: auto; justify-content: flex-start; }
             .message.user .msg-toolbar { right: auto; justify-content: flex-end; }
+            .msg-toolbar button {
+                width: 36px;
+                height: 36px;
+            }
+            .msg-toolbar .gen-count { min-width: 32px; }
         }
 
         /* Feature grid: 1 col under 720px — removed */
@@ -1911,21 +1924,39 @@
            ══════════════════════════════════════════════════════════════ */
         .offline-banner {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 99;
-            background: rgba(230,106,122,0.9);
-            color: white;
-            text-align: center;
-            padding: 6px;
+            top: var(--s-3);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 15;
+            display: flex;
+            align-items: center;
+            gap: var(--s-2);
+            background: var(--panel-bg);
+            color: var(--text);
+            border: 1px solid rgba(230,106,122,0.35);
+            border-radius: var(--radius-pill);
+            padding: 8px 16px;
             font-size: var(--text-xs);
             font-weight: 600;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+            backdrop-filter: blur(20px) saturate(140%);
+            -webkit-backdrop-filter: blur(20px) saturate(140%);
             animation: offlineSlideIn 200ms ease-out;
+            /* Status indicator only — must never intercept clicks on the
+               chrome underneath it (was blocking the mobile menu button). */
+            pointer-events: none;
         }
+        .offline-banner .offline-banner-icon { color: var(--danger); }
         @keyframes offlineSlideIn {
-            from { transform: translateY(-100%); }
-            to   { transform: translateY(0); }
+            from { opacity: 0; transform: translate(-50%, -8px); }
+            to   { opacity: 1; transform: translate(-50%, 0); }
+        }
+        /* On narrow viewports the top-bar pills run edge-to-edge, so give the
+           status pill room below them instead of overlapping. Placed after the
+           base rule (unlike the earlier mobile breakpoint block) so it wins the
+           cascade without needing !important. */
+        @media (max-width: 639px) {
+            .offline-banner { top: calc(var(--s-9) + var(--s-2)); max-width: calc(100% - var(--s-6)); }
         }
 
         /* ══════════════════════════════════════════════════════════════
@@ -2058,3 +2089,70 @@
         }
         /* Inside the modal the config is always shown at full height. */
         .story-settings-modal .story-config { max-height: none; }
+
+        /* ══════════════════════════════════════════════════════════════
+           20. CONFIRM DIALOG (destructive-action confirmation)
+           ══════════════════════════════════════════════════════════════ */
+        .confirm-dialog-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--s-5);
+            background: rgba(4,6,14,0.6);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            animation: toastIn 200ms ease-out;
+        }
+        .confirm-dialog {
+            background: var(--panel-bg);
+            border: 1px solid var(--stroke);
+            border-radius: var(--radius-lg);
+            padding: var(--s-5);
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+        }
+        .confirm-dialog-message {
+            font-size: var(--text-base);
+            color: var(--text);
+            margin-bottom: var(--s-5);
+            line-height: var(--lh-base);
+        }
+        .confirm-dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--s-2);
+        }
+        .confirm-dialog-cancel {
+            height: 36px;
+            padding: 0 16px;
+            border-radius: var(--radius-pill);
+            background: transparent;
+            border: 1px solid var(--stroke);
+            color: var(--text-secondary);
+            font-family: var(--font-sans);
+            font-size: var(--text-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 150ms ease-out;
+        }
+        .confirm-dialog-cancel:hover { background: var(--panel-bg-hover); color: var(--text); }
+        .confirm-dialog-confirm {
+            height: 36px;
+            padding: 0 16px;
+            border-radius: var(--radius-pill);
+            background: rgba(230,106,122,0.15);
+            border: 1px solid rgba(230,106,122,0.4);
+            color: var(--danger);
+            font-family: var(--font-sans);
+            font-size: var(--text-sm);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 150ms ease-out;
+        }
+        .confirm-dialog-confirm:hover { background: rgba(230,106,122,0.28); }
+        .confirm-dialog-cancel:focus-visible,
+        .confirm-dialog-confirm:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,3 +1,8 @@
 # skipping folders
 .superpowers/
 "error images/"
+
+# dev-only Playwright verification tool (tools/playwright) — not part of the app
+tools/playwright/node_modules/
+tools/playwright/shots/
+tools/playwright/package-lock.json
