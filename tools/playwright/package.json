@@ -1,9 +1,0 @@
-{
-  "name": "chatchat-ui-tools",
-  "private": true,
-  "description": "Dev-only Playwright screenshot/inspection helper for manual UI/UX verification. Not part of the app runtime, no build step for chatchat itself is affected.",
-  "type": "commonjs",
-  "dependencies": {
-    "playwright": "^1.48.0"
-  }
-}
