@@ -6,3 +6,5 @@
 tools/playwright/node_modules/
 tools/playwright/shots/
 tools/playwright/package-lock.json
+
+docs/
