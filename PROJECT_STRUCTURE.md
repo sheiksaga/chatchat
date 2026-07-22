@@ -1,5 +1,9 @@
 # Project Structure
 
+> For cross-cutting architecture (state model, localStorage schema, provider
+> abstraction, story modes, streaming, regeneration) see `AGENTS.md`. This
+> file covers the file layout, script load order, and per-file dependencies.
+
 ```
 chat/
 ├── index.html              # App shell — HTML markup, no inline CSS/JS
@@ -36,9 +40,9 @@ All files share global scope (regular `<script>` tags, not ES modules). Function
 | `api.js`         | `state` (apiParams, selectedModel), `messages` (renderMarkdown)   |
 | `models.js`      | `state` (all vars), DOM                                           |
 | `config.js`      | `state` (apiParams)                                               |
-| `chatlist.js`    | `state`, `view` (showHeroView/ showChatView), `messages`          |
+| `chatlist.js`    | `state`, `view` (showHeroView/ showChatView), `messages`, `init` (setMode) |
 | `messages.js`    | `state`, `generations` (regenerateMessage, cycleGeneration)       |
-| `generations.js` | `state`, `api`, `messages`, `chatlist`                            |
+| `generations.js` | `state`, `api`, `messages`, `chatlist`, `chat` (streamAssistantResponse) |
 | `chat.js`        | `state`, `view`, `api`, `messages`, `models` (resetIdleTimer), `chatlist` |
 | `hero.js`        | `chat` (sendMessage)                                              |
 | `init.js`        | everything above                                                  |
