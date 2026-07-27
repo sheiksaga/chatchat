@@ -1,10 +1,15 @@
-# skipping folders
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.rtf
+
+# local agent + tooling config
+.claude/
 .superpowers/
+docs/
 "error images/"
 
 # dev-only Playwright verification tool (tools/playwright) — not part of the app
 tools/playwright/node_modules/
 tools/playwright/shots/
 tools/playwright/package-lock.json
-
-docs/
