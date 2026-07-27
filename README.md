@@ -27,7 +27,7 @@ Download the ZIP from the green *Code* button up top and unzip it, or if you're
 a git person:
 
 ```bash
-git clone https://github.com/<your-username>/chatchat.git
+git clone https://github.com/sheiksaga/chatchat.git
 cd chatchat
 ```
 
