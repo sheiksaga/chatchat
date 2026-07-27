@@ -109,5 +109,4 @@ Thanks for reading. ❤️
 
 [^1]: Other than to whichever model you're talking to, obviously. If that model
 is running on your laptop, then genuinely nowhere.
-[^2]: Any static server does the job. `npx serve`, VS Code's Live Server, that
-one Ruby one-liner you remember from 2011 — all fine.
+[^2]: Any static server does the job. I think.
