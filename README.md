@@ -8,13 +8,13 @@ download, open in a browser, and use. Your conversations live in your browser's
 localStorage and go nowhere else.[^1]
 
 I built it because I wanted something nicer than a terminal for poking at local
-models, and every other option wanted me to sign up for something.
+models, and i needed something lightweight to test on my other devices.
 
 ## what you need
 
-- **[LM Studio](https://lmstudio.ai)** (free) with at least one model downloaded
+- **[LM Studio](https://lmstudio.ai)** (free) with at least one model downloaded. It also works with Ollama and Llam.cpp. you just have to point your exposed server in settings.
 - A browser
-- Python, or any other way to serve a folder of files locally
+- Python (optional)
 
 If you'd rather use a cloud model, there's a NanoGPT option built in — skip to
 [using a cloud model](#using-a-cloud-model-instead) for that.
@@ -46,6 +46,10 @@ Leave LM Studio running in the background.
 
 From inside the chatchat folder:
 
+double-click on index.html. Your browser of choice should accept Http instead of Https.
+
+Alternatively:
+
 ```bash
 python3 -m http.server 8080
 ```
@@ -57,23 +61,6 @@ Then open **http://localhost:8080** in your browser.[^2]
 The dropdown at the top lists whatever LM Studio currently has loaded. Choose
 one, type something into the box, hit enter. That's the whole setup.
 
-## what's in the box
-
-A few things I kept adding because I wanted them:
-
-* **Streaming responses** — text appears as it's generated, and hitting stop
-  keeps whatever arrived rather than throwing it away
-* **Regenerate & cycle** — didn't like that answer? Regenerate it. Every
-  version is kept, and you can flip back and forth between them
-* **Story mode** — three flavours (choose-your-own-adventure, roleplay, and a
-  game-master style) that build a system prompt for you from a scene, some
-  characters and a few tags
-* **Multiple chats** — a sidebar with the usual create / rename / delete
-* **History compression** — when a conversation gets long, it can summarise the
-  older turns so you don't blow past the context window
-* **Sampling controls** — temperature, repetition penalty, top-p, top-k. It
-  also tries to read sensible defaults off a model's Hugging Face README
-* **Markdown + syntax highlighting**, with a copy button on code blocks
 
 ## using a cloud model instead
 
