@@ -1,5 +1,49 @@
 # Improving ChatChat for LLM-Assisted Development
 
+## Session log — 2026-07-31 (recovery pass)
+
+**Context: the second pass ran `git checkout .` on a repo where nothing had
+ever been committed.** That reverted every tracked file to `ca26b43` and
+destroyed most of the first pass's work. Everything now committed.
+
+**Root cause worth remembering: three consecutive prompts said "one item per
+commit" and zero commits were ever made.** Verify with `git log`, don't assume.
+
+Recovered, in order, each its own commit:
+1. `c3f6ea6` — committed everything that survived (it was all untracked and
+   one command from being lost): CSS split, `vendor/`, test suite, `dom.js`,
+   `tools/`, dev tooling. Restored `.gitignore` first so `node_modules/`
+   wasn't swept into the commit.
+2. `2bfa219` — **the app was silently broken.** 8 functions were called but
+   defined nowhere, so `/image` threw `ReferenceError` and images never
+   re-rendered after reload. The smoke test had been *skipped* rather than
+   fixed, which hid it. Restored `safeSetItem`, `safeGetJSON`,
+   `getChatIndex`/`setChatIndex`, `getChatMeta`/`setChatMeta`,
+   `IMAGE_PROVIDER_ID`, `DEFAULT_IMAGE_MODEL`/`SIZE`, `imageParams`,
+   `imageApiBase`, `imageApiHeaders`, `apiErrorDetail`; wrote
+   `renderImageMessage` and rewired `/image` dispatch in `sendMessage`.
+   `renderImageMessage` was reconstructed from the contract preserved in the
+   surviving CSS (`.message-image`, `.generated-image`,
+   `.generated-image-missing`) and the test — not invented.
+3. `8f37dd6` — item 5 redone: ~75 call sites routed through the helpers. Zero
+   raw `localStorage` calls remain outside the wrapper.
+4. `a435224` — `AGENTS.md` and `PROJECT_STRUCTURE.md` rewritten against the
+   code as it is now, including its rough edges.
+
+**Final: 9/9 tests passing**, `/image` un-skipped.
+
+**Still outstanding** (lost in the revert, not yet redone):
+- Item 8 — 35 inline `onclick=` handlers are back in `index.html`;
+  `js/dom.js` is loaded but unused.
+- Item 3 — the JSDoc pass.
+- Item 7 — the 7 split JS modules (`markdown.js`, `export-import.js`,
+  `image-models.js`, `offline.js`, `story-form.js`, `story-mode.js`,
+  `story-io.js`). Five files remain over ~250 lines.
+- Item 10 — ES modules, still unstarted. Note it would break `file://`
+  opening, which `AGENTS.md` documents as a supported way to run the app.
+
+---
+
 ## Session log — 2025-07-31 (second pass)
 
 **Item A (CSS split finish): applied and verified.** `layout.css` (605→132+222+249)
