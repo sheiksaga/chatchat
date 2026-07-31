@@ -130,15 +130,9 @@ function toggleConfig() {
     }
 }
 
-/**
- * Toggle the sidebar between collapsed (icon-rail) and expanded.
- */
+/** Toggle the sidebar between expanded and collapsed (icon-rail). */
 function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    // Mobile: toggle drawer
-    sidebar.classList.toggle('open');
-    // Desktop: toggle collapse to icon-rail
-    sidebar.classList.toggle('collapsed');
+    document.getElementById('sidebar').classList.toggle('collapsed');
 }
 
 // Global escape key handler: close panels and dropdowns

@@ -90,20 +90,16 @@
                     <button class="top-pill btn-eject hidden" id="btn-eject" onclick="unloadModel()" title="Unload model" aria-label="Unload model">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/><line x1="12" y1="3" x2="12" y2="15"/><line x1="5" y1="21" x2="19" y2="21"/></svg>
                     </button>
+                    <!-- Model selector dropdown -->
+                    <div class="model-dropdown" id="model-dropdown"></div>
                 </div>
                 <div class="top-bar-right">
                     <button class="top-pill" id="config-btn" onclick="toggleConfig()">
                         <span class="pill-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
                         <span>Configuration</span>
                     </button>
-                </div>
-            </div>
-
-            <!-- Model selector dropdown -->
-            <div class="model-dropdown" id="model-dropdown"></div>
-
-            <!-- Configuration panel -->
-            <div class="top-bar-settings" id="config-panel">
+                    <!-- Configuration panel -->
+                    <div class="top-bar-settings" id="config-panel">
                 <div class="settings-mode-row">
                     <span class="settings-label">Mode</span>
                     <div class="config-mode-pills" role="group" aria-label="Conversation mode">
@@ -172,6 +168,8 @@
                         <li><span>New line</span> <kbd>Shift+Enter</kbd></li>
                         <li><span>Close panel</span> <kbd>Esc</kbd></li>
                     </ul>
+                </div>
+                    </div>
                 </div>
             </div>
 

@@ -2,10 +2,14 @@
 .DS_Store
 Thumbs.db
 *.rtf
+*.log
+.vscode/
+.idea/
 
 # local agent + tooling config
 .claude/
 .superpowers/
+.sessions/
 docs/
 "error images/"
 
