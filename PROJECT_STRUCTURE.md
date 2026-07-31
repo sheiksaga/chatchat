@@ -9,17 +9,8 @@
 chat/
 ├── README.md               # Human-facing intro
 ├── index.html              # App shell — markup + 35 inline onclick handlers, no inline CSS
-├── css/                    # Split from a single 2,270-line style.css
-│   ├── tokens.css          # Design tokens (:root custom properties)
-│   ├── reset-world.css     # Reset and world/background layer
-│   ├── sidebar.css         # Sidebar chat list
-│   ├── shell-topbar.css    # App shell and top bar
-│   ├── hero.css            # Landing / hero region, orb, prompt chips, story config
-│   ├── chat-messages.css   # Message bubbles, markdown, images
-│   ├── code-blocks.css     # Code block chrome and syntax theme hooks
-│   ├── config.css          # Model dropdowns, config panel
-│   ├── components.css      # Motion, toasts, offline banner, icons, dialogs
-│   └── responsive.css      # All media queries
+├── css/
+│   └── style.css           # Skeleton styles (~458 lines) — see note below
 ├── js/                     # Classic scripts, global scope — see load order below
 │   ├── state.js            # State, storage helpers, provider + image config
 │   ├── dom.js              # DOM id map and $() helper — LOADED BUT UNUSED
@@ -49,6 +40,31 @@ chat/
 ├── playwright.config.js    # Serves the dir on port 8765, starts/stops itself
 └── package.json            # Dev tooling only (Playwright, prettier)
 ```
+
+## Styling
+
+`css/style.css` is a deliberate **skeleton**. It replaced ~2,290 lines of
+decorative CSS that had drifted out of sync with the markup — the settings
+panel, for one, had no matching rule and rendered its whole form inline,
+pushing the hero off screen.
+
+The rule for what belongs in it: **styling that carries behaviour, not
+appearance.** Those rules are commented `[FUNCTIONAL]` and must survive any
+restyle:
+
+| Rule | Why it is load-bearing |
+|------|------------------------|
+| `.hidden { display: none !important }` | every view toggle routes through it |
+| `.hero-input-textarea` collapsed + `.hero-input.active` reveal | the hero input's show/hide; asserted by two tests |
+| `.model-dropdown` / `.top-bar-settings` hidden until `.open` | panels are closed by default |
+| `.message-image`, `.generated-image`, `.generated-image-missing` | exact names `renderImageMessage()` targets |
+| `#sr-announcer` off-screen (not `display:none`) | `display:none` makes assistive tech ignore it |
+| `overflow-x` on `pre`, `overflow-wrap` on `.message` | stops long content scrolling the page sideways |
+
+The panel's class is `top-bar-settings`; `config-panel` is only its close
+button and its element **id**. Styling the wrong one is what broke the layout.
+
+Decorative parallax layers (`.world`) are still in the markup but not painted.
 
 ## Script Load Order
 
