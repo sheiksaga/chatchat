@@ -19,19 +19,6 @@ const DEFAULT_IMAGE_STYLE =
   "cinematic photograph, natural lighting, shallow depth of field, " +
   "photorealistic, highly detailed, single frame, no text";
 
-/**
- * Always sent as part of the negative prompt, ahead of anything the user typed.
- *
- * A scene description is full of dialogue and multiple characters, which reads
- * to a diffusion model like a comic page brief — Chroma in particular answers
- * it with panels and speech balloons. These terms are the counterweight; the
- * user's own negative prompt is appended to them rather than replacing them.
- */
-const BASE_NEGATIVE_PROMPT =
-  "speech bubble, speech balloon, dialogue box, caption, text, letters, words, " +
-  "watermark, signature, logo, comic, comic panel, panels, manga, cartoon, " +
-  "anime, illustration, drawing, painting, sketch, cel shading, 3d render, cgi";
-
 /** Read the current chat's image profile, creating it on first use. */
 function getImageProfile() {
   if (!currentChatId) return newImageProfile();

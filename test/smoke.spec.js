@@ -60,25 +60,6 @@ async function mockImageGeneration(page) {
   });
 }
 
-/**
- * Stub the image models catalogue endpoint.
- */
-async function mockImageModels(page) {
-  await page.route('**/api/v1/images/models', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: [{
-          id: 'hidream',
-          name: 'HiDream',
-          supported_parameters: { resolutions: ['1024x1024'] }
-        }]
-      })
-    });
-  });
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // Existing hero-view tests (unchanged)
 // ═══════════════════════════════════════════════════════════════════════
@@ -267,7 +248,6 @@ test('sidebar undo restores a deleted chat', async ({ page }) => {
 test('/image command generates an image message', async ({ page }) => {
   await mockBaseEndpoints(page);
   await mockImageGeneration(page);
-  await mockImageModels(page);
 
   // Mock chat completions: streaming for chat reply, non-streaming for scene summariser
   await page.route('**/v1/chat/completions', async (route) => {

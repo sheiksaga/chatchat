@@ -2,21 +2,57 @@
    images.js — Image generation across cloud providers
    ══════════════════════════════════════════════════════════════ */
 
-const OPENAI_IMAGE_MODELS = ["dall-e-2", "dall-e-3", "gpt-image-1"];
+/**
+ * Which provider config should handle image generation. If the active chat
+ * provider is Local (which never serves images), fall back to whichever
+ * other configured provider (preset or custom) declares image support and
+ * has a key — so a local model still gets image generation when the user
+ * has a cloud image API key set up, without switching chat providers. If a
+ * cloud provider is active, images always follow it (even if that provider
+ * lacks image support/a key — surfaced as a normal error, not silently
+ * routed elsewhere).
+ * @returns {{cfg: object|null, ambiguous: boolean}}
+ */
+function resolveImageProvider() {
+  const active = currentProvider();
+  if (!active.isLocal) return { cfg: active, ambiguous: false };
+
+  const candidates = ["nanogpt", "openai", "openrouter"]
+    .map(getProviderConfig)
+    .concat(getCustomProviders().map((p) => getProviderConfig(p.id)))
+    .filter((cfg) => cfg.images && cfg.key);
+
+  if (candidates.length === 1) return { cfg: candidates[0], ambiguous: false };
+  if (candidates.length > 1) return { cfg: null, ambiguous: true };
+  return { cfg: null, ambiguous: false };
+}
+
+/** Fetch headers for a specific provider config (may differ from the active chat provider). */
+function imageProviderHeaders(cfg, extra) {
+  const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
+  if (cfg.key) h["Authorization"] = "Bearer " + cfg.key;
+  return h;
+}
 
 /**
- * Generate an image via whichever cloud provider is active.
+ * Generate an image via whichever provider {@link resolveImageProvider}
+ * picks, using the OpenAI-compatible image request shape (prompt/model/
+ * size/n) — the only shape this app supports, since every configured
+ * provider is required to be OpenAI-compatible.
  * @param {string} prompt
  * @param {AbortSignal} [signal]
- * @param {number} [seed] Reused across a chat to stabilise its look — only
- *   meaningful for the "nanogpt" shape; ignored for "openai".
  * @returns {Promise<string>} A data: URL for the generated image
  */
-async function requestImage(prompt, signal, seed) {
-  const cfg = currentProvider();
-  if (!cfg.imageShape) {
+async function requestImage(prompt, signal) {
+  const { cfg, ambiguous } = resolveImageProvider();
+  if (ambiguous) {
     throw new Error(
-      "Active provider has no image generation support — switch to a provider that does under Provider in settings",
+      "Multiple configured providers support image generation — leave a key on only one image-capable provider, or switch to one of them as the active provider",
+    );
+  }
+  if (!cfg || !cfg.images) {
+    throw new Error(
+      "No provider configured for image generation — add an API key to a provider that supports images under Provider in settings",
     );
   }
   if (!cfg.key) {
@@ -25,104 +61,20 @@ async function requestImage(prompt, signal, seed) {
     );
   }
 
-  if (cfg.imageShape === "openai") {
-    return await postOpenAIImage(prompt, signal);
-  }
-  return await requestNanoGPTImage(prompt, signal, seed);
-}
-
-/** NanoGPT's bespoke image shape — resolution/nImages/negative_prompt fields. */
-async function requestNanoGPTImage(prompt, signal, seed) {
-  // This route's canonical sizing field is `resolution` (not `size`) and its
-  // count field is `nImages` (not `n`) — it is not the plain OpenAI shape.
-  const body = {
-    prompt: prompt,
-    model: imageParams.model,
-    resolution: imageParams.size,
-    nImages: 1,
-    // The baked-in terms come first so they survive any truncation; the
-    // user's own negative prompt extends them rather than replacing them.
-    negative_prompt: [
-      BASE_NEGATIVE_PROMPT,
-      (imageParams.negativePrompt || "").trim(),
-    ]
-      .filter(Boolean)
-      .join(", "),
-    showExplicitContent: !!imageParams.showExplicitContent,
-  };
-  // Only sent when the user set them — valid ranges are model-specific.
-  if (imageParams.guidanceScale !== "")
-    body.guidance_scale = parseFloat(imageParams.guidanceScale);
-  if (imageParams.steps !== "")
-    body.num_inference_steps = parseInt(imageParams.steps, 10);
-  if (seed != null) body.seed = seed;
-
-  try {
-    return await postImage(body, signal);
-  } catch (err) {
-    // A subscription only covers generations at the standard settings, so a
-    // custom seed can push an otherwise-included request onto paid balance
-    // and fail there. Dropping it is a real loss of continuity, but a
-    // slightly different face beats no image at all.
-    if (seed != null && /insufficient balance/i.test(err.message)) {
-      console.warn(
-        "Seeded request was billed to balance and rejected; retrying without a seed.",
-      );
-      delete body.seed;
-      return await postImage(body, signal);
-    }
-    throw err;
-  }
-}
-
-/** Standard OpenAI image shape — prompt/model/size/n. */
-async function postOpenAIImage(prompt, signal) {
   const body = {
     prompt: prompt,
     model: imageParams.model,
     size: imageParams.size,
     n: 1,
   };
-  const response = await fetch(`${API_BASE}/images/generations`, {
+  const response = await fetch(`${cfg.baseUrl}/images/generations`, {
     method: "POST",
-    headers: apiHeaders(),
+    headers: imageProviderHeaders(cfg),
     body: JSON.stringify(body),
     signal: signal,
   });
   if (!response.ok) throw new Error(await apiErrorDetail(response));
   return extractImageUrl(await response.json());
-}
-
-/**
- * POST one image body to NanoGPT's generation endpoint and unwrap the result.
- * @param {object} body
- * @param {AbortSignal} [signal]
- * @returns {Promise<string>} data: URL or hosted image URL
- */
-async function postImage(body, signal) {
-  const response = await fetch(`${API_BASE}/images/generations`, {
-    method: "POST",
-    headers: apiHeaders(),
-    body: JSON.stringify(body),
-    signal: signal,
-  });
-
-  if (!response.ok) throw new Error(await apiErrorDetail(response));
-
-  const data = await response.json();
-  // paymentSource says whether the subscription or the paid balance covered
-  // this one — the only way to tell which requests count as included.
-  if (data.paymentSource !== undefined || data.cost !== undefined) {
-    console.info(
-      "Image billed via",
-      data.paymentSource,
-      "— cost",
-      data.cost,
-      "— remaining balance",
-      data.remainingBalance,
-    );
-  }
-  return extractImageUrl(data);
 }
 
 /**
@@ -174,9 +126,7 @@ function extractImageUrl(data) {
  * stop button, persistence on the way out.
  * @param {string} prompt A direction for the scene summariser, or — when
  *   `opts.raw` is set — the literal image prompt. Empty means "the scene as-is".
- * @param {{reroll?:boolean, raw?:boolean}} [opts] `reroll` picks a fresh seed —
- *   without it a regenerate would reproduce the identical image, since prompt
- *   and seed would both be unchanged. `raw` skips the summariser entirely.
+ * @param {{raw?:boolean}} [opts] `raw` skips the summariser entirely.
  * @returns {Promise<number>} Index of the new message, or -1 on failure
  */
 async function generateImageMessage(prompt, opts) {
@@ -233,13 +183,9 @@ async function generateImageMessage(prompt, opts) {
     loadingDiv.className = "message assistant loading-indicator";
     loadingDiv.textContent = "";
 
-    const seed = opts.reroll
-      ? Math.floor(Math.random() * 2147483647)
-      : composed.seed;
     const dataUrl = await requestImage(
       composed.prompt,
       currentAbortController.signal,
-      seed,
     );
 
     const id = newImageId();
@@ -295,81 +241,17 @@ async function generateImageMessage(prompt, opts) {
 }
 
 /* ── Image model selector ─────────────────────────────────────────
-   Cloud providers that support image generation expose a pickable
-   list of diffusion / image models separate from text models. */
+   No provider-side discovery: with only the OpenAI-compatible shape
+   supported, there's no clean generic way to shortlist a provider's image
+   models from its plain /models list (OpenAI has ~3 known image model ids;
+   NanoGPT alone has 200+, with no capability flag on the general list).
+   The user just types the model id they want. */
 
 /**
- * Fetch available image models for the active provider's declared shape.
- * @returns {Promise<string[]>}
+ * Open the image model id editor — a single text field pre-filled with the
+ * current model, committed on Enter or blur.
  */
-async function fetchImageModels() {
-  const cfg = currentProvider();
-  if (cfg.imageShape === "openai") return await fetchOpenAIImageModels();
-  if (cfg.imageShape === "nanogpt") return await fetchNanoGPTImageModels();
-  return [];
-}
-
-/**
- * Fetch from NanoGPT's dedicated image-model catalogue (not the general
- * /models list, which is text LLMs plus the odd exception). Restricted to
- * pure text-to-image models — the app never uploads a source image, so
- * image-to-image/edit-only models would just fail at generation time.
- * @returns {Promise<string[]>}
- */
-async function fetchNanoGPTImageModels() {
-  try {
-    const resp = await fetch(`${API_BASE}/images/models`, {
-      headers: apiHeaders(),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    const models = data.data || [];
-
-    return models
-      .filter((m) => {
-        const modality = m.architecture && m.architecture.modality;
-        return (
-          m.capabilities &&
-          m.capabilities.image_generation &&
-          typeof modality === "string" &&
-          modality.startsWith("text->image")
-        );
-      })
-      .map((m) => m.id);
-  } catch (e) {
-    console.warn("Failed to fetch NanoGPT image models:", e);
-    return [];
-  }
-}
-
-/**
- * OpenAI's /v1/models has no image-vs-text capability flag, so intersect
- * the account's actual model list with a fixed allowlist of known OpenAI
- * image model ids — never show one the account doesn't have access to.
- * @returns {Promise<string[]>}
- */
-async function fetchOpenAIImageModels() {
-  try {
-    const resp = await fetch(`${API_BASE}/models`, {
-      headers: apiHeaders(),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    const available = new Set((data.data || []).map((m) => m.id));
-    return OPENAI_IMAGE_MODELS.filter((id) => available.has(id));
-  } catch (e) {
-    console.warn("Failed to fetch OpenAI image models:", e);
-    return [];
-  }
-}
-
-/**
- * Open the image model selector dropdown, fetching models for the active
- * provider's image shape if this is the first open.
- */
-async function openImageModelSelector() {
+function openImageModelSelector() {
   const dropdown = document.getElementById("image-model-dropdown");
   if (!dropdown) return;
   if (dropdown.classList.contains("open")) {
@@ -381,42 +263,28 @@ async function openImageModelSelector() {
   document.getElementById("model-dropdown")?.classList.remove("open");
   document.getElementById("config-panel")?.classList.remove("open");
 
-  dropdown.setAttribute("role", "listbox");
-  dropdown.setAttribute("aria-label", "Available image models");
-  dropdown.innerHTML =
-    '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">Loading image models…</div>';
+  dropdown.innerHTML = "";
   dropdown.classList.add("open");
 
-  try {
-    const models = await fetchImageModels();
-    dropdown.innerHTML = "";
-
-    if (models.length === 0) {
-      dropdown.innerHTML =
-        '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">No image models found</div>';
-      return;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "story-config-input image-model-input";
+  input.placeholder = "Model id (e.g. gpt-image-1)";
+  input.value = imageParams.model;
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
     }
-
-    models.forEach((modelId, i) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "model-dropdown-item";
-      item.setAttribute("role", "option");
-      item.textContent = modelId;
-      if (modelId === imageParams.model) {
-        item.classList.add("active");
-        item.setAttribute("aria-selected", "true");
-      }
-      item.onclick = () => selectImageModel(modelId);
-      if (i < 12)
-        item.style.animation =
-          `dropdownItemIn 200ms ${i * 40}ms both cubic-bezier(0.34, 1.56, 0.64, 1)`;
-      dropdown.appendChild(item);
-    });
-  } catch (err) {
-    dropdown.innerHTML =
-      `<div class="model-dropdown-item" style="color:var(--danger);">Error: ${err.message}</div>`;
-  }
+  });
+  input.addEventListener("blur", () => {
+    const val = input.value.trim();
+    if (val) selectImageModel(val);
+    else dropdown.classList.remove("open");
+  });
+  dropdown.appendChild(input);
+  input.focus();
+  input.select();
 }
 
 /**
@@ -431,12 +299,12 @@ function selectImageModel(modelId) {
   document.getElementById("image-model-dropdown")?.classList.remove("open");
 }
 
-/** Update visibility of the image model selector pill based on active provider. */
+/** Update visibility of the image model selector pill based on the resolved image provider. */
 function updateImageModelVisibility() {
   const pill = document.getElementById("image-model-selector");
   if (!pill) return;
-  const cfg = currentProvider();
-  const show = !cfg.isLocal && !!cfg.imageShape && !!cfg.key;
+  const { cfg } = resolveImageProvider();
+  const show = !!cfg && !!cfg.images && !!cfg.key;
   pill.classList.toggle("hidden", !show);
   // Also close the dropdown when hiding
   if (!show) document.getElementById("image-model-dropdown")?.classList.remove("open");
@@ -452,12 +320,9 @@ function initImageModelName() {
 document.addEventListener("click", (e) => {
   const dropdown = document.getElementById("image-model-dropdown");
   const selector = document.getElementById("image-model-selector");
-  if (
-    dropdown &&
-    selector &&
-    !selector.contains(e.target) &&
-    !dropdown.contains(e.target)
-  ) {
+  if (!dropdown || !selector) return;
+  const path = e.composedPath();
+  if (!path.includes(dropdown) && !path.includes(selector)) {
     dropdown.classList.remove("open");
   }
 });

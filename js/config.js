@@ -166,7 +166,7 @@ function submitAddProviderForm() {
     label: label,
     baseUrl: baseUrl,
     key: key,
-    imageShape: wantsImages ? "openai" : undefined,
+    images: wantsImages,
   });
   document.getElementById("add-provider-label").value = "";
   document.getElementById("add-provider-baseurl").value = "";

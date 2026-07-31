@@ -16,13 +16,13 @@ const API_PROVIDERS = {
     label: "NanoGPT",
     baseUrl: "https://nano-gpt.com/api/v1",
     isLocal: false,
-    imageShape: "nanogpt",
+    images: true,
   },
   openai: {
     label: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     isLocal: false,
-    imageShape: "openai",
+    images: true,
   },
   openrouter: {
     label: "OpenRouter",
@@ -33,7 +33,7 @@ const API_PROVIDERS = {
 
 const CUSTOM_PROVIDERS_KEY = "custom_providers";
 
-/** @returns {Array<{id:string,label:string,baseUrl:string,key:string,imageShape?:string}>} */
+/** @returns {Array<{id:string,label:string,baseUrl:string,key:string,images?:boolean}>} */
 function getCustomProviders() {
   const list = safeGetJSON(CUSTOM_PROVIDERS_KEY, []);
   return Array.isArray(list) ? list : [];
@@ -46,7 +46,7 @@ function setCustomProviders(list) {
 
 /**
  * Add a user-defined OpenAI-compatible cloud provider.
- * @param {{label:string, baseUrl:string, key:string, imageShape?:string}} cfg
+ * @param {{label:string, baseUrl:string, key:string, images?:boolean}} cfg
  * @returns {string} The generated provider id
  */
 function addCustomProvider(cfg) {
@@ -57,7 +57,7 @@ function addCustomProvider(cfg) {
     label: cfg.label,
     baseUrl: cfg.baseUrl,
     key: cfg.key || "",
-    imageShape: cfg.imageShape || undefined,
+    images: !!cfg.images,
   });
   setCustomProviders(list);
   return id;
@@ -84,7 +84,7 @@ function getProviderConfig(id) {
       id: id,
       label: base.label,
       isLocal: base.isLocal,
-      imageShape: base.imageShape,
+      images: !!base.images,
       baseUrl: saved.baseUrl || base.baseUrl,
       key: saved.key || "",
     };
@@ -95,7 +95,7 @@ function getProviderConfig(id) {
       id: custom.id,
       label: custom.label,
       isLocal: false,
-      imageShape: custom.imageShape,
+      images: !!custom.images,
       baseUrl: custom.baseUrl,
       key: custom.key || "",
     };
@@ -307,8 +307,9 @@ function setChatMeta(meta) {
 }
 
 /* ── Image generation ─────────────────────────────────────────────
-   Image requests target whichever cloud provider is active and
-   declares an imageShape — see js/images.js for the shape adapters. */
+   Image requests target whichever cloud provider resolveImageProvider()
+   (js/images.js) picks, and always use the OpenAI-compatible request
+   shape (prompt/model/size/n). */
 
 const DEFAULT_IMAGE_MODEL = "hidream";
 const DEFAULT_IMAGE_SIZE = "1024x1024";
@@ -317,10 +318,4 @@ const DEFAULT_IMAGE_SIZE = "1024x1024";
 const imageParams = {
   model: localStorage.getItem("image_model") || DEFAULT_IMAGE_MODEL,
   size: localStorage.getItem("image_size") || DEFAULT_IMAGE_SIZE,
-  resolutions: safeGetJSON("image_resolutions", []),
-  negativePrompt: localStorage.getItem("image_negative_prompt") || "",
-  guidanceScale: localStorage.getItem("image_guidance_scale") || "",
-  steps: localStorage.getItem("image_steps") || "",
-  // Absent means enabled — only the literal string 'false' disables it.
-  showExplicitContent: localStorage.getItem("image_explicit") !== "false",
 };

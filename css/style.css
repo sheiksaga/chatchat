@@ -395,7 +395,7 @@ body {
 
 .prompt-chip {
   padding: 6px 14px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   color: var(--muted);
@@ -583,6 +583,10 @@ body {
 }
 .model-dropdown-item:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.image-model-input {
+  width: 100%;
 }
 
 .story-settings-overlay,
