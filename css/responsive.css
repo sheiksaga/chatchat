@@ -1,0 +1,285 @@
+/* ══════════════════════════════════════════════════════════════
+   responsive.css — Auto-split from style.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+           11. RESPONSIVE (§6.1)
+           ══════════════════════════════════════════════════════════════ */
+
+        /* Tablet: sidebar → icon rail */
+        @media (max-width: 1023px) {
+            .app-shell { inset: var(--s-4); }
+            .sidebar {
+                width: 64px;
+                min-width: 64px;
+                padding: var(--s-3);
+                align-items: center;
+            }
+            .sidebar-section-label,
+            .sidebar-row-label,
+            .btn-new-chat span,
+            .btn-delete-all-label { display: none; }
+            .sidebar-brand { justify-content: center; margin-bottom: var(--s-4); }
+            .btn-new-chat {
+                width: 40px; height: 40px;
+                justify-content: center;
+                padding: 0;
+                font-size: 16px;
+            }
+            .sidebar-row {
+                justify-content: center;
+                padding: 0;
+                width: 40px; height: 40px;
+                position: relative;
+            }
+            .sidebar-row-icon { margin: 0; }
+            .sidebar-row-delete {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 14px;
+                height: 14px;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+                border-radius: 999px;
+                background: rgba(13,20,36,0.85);
+                opacity: 0;
+                pointer-events: none;
+            }
+            .sidebar-row:hover .sidebar-row-delete,
+            .sidebar-row:focus-within .sidebar-row-delete {
+                opacity: 0.9;
+                pointer-events: auto;
+            }
+            .sidebar-row-rename { display: none; }
+            .sidebar:hover .sidebar-row-rename { display: inline-flex; }
+            .sidebar-separator { margin: var(--s-1) 0; }
+            .btn-delete-all {
+                width: 40px; height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+            .sidebar-io { flex-direction: column; }
+            .btn-sidebar-io {
+                width: 40px; height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+            .btn-sidebar-io span { display: none; }
+
+            .sidebar:hover {
+                width: 280px;
+                min-width: 280px;
+                padding: var(--s-5);
+                align-items: stretch;
+                position: absolute;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                z-index: 20;
+            }
+            .sidebar:hover .sidebar-section-label,
+            .sidebar:hover .sidebar-row-label,
+            .sidebar:hover .sidebar-row-delete,
+            .sidebar:hover .btn-new-chat span,
+            .sidebar:hover .btn-sidebar-io span,
+            .sidebar:hover .btn-delete-all-label { display: initial; }
+            .sidebar:hover .sidebar-io { flex-direction: row; }
+            .sidebar:hover .btn-sidebar-io {
+                width: 100%;
+                height: auto;
+                justify-content: flex-start;
+                padding: var(--s-2) var(--s-3);
+            }
+            .sidebar:hover .sidebar-brand { justify-content: flex-start; }
+            .sidebar:hover .btn-new-chat {
+                width: 100%; height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+            .sidebar:hover .btn-delete-all {
+                width: 100%;
+                height: auto;
+                justify-content: flex-start;
+                padding: var(--s-2) var(--s-3);
+            }
+            .sidebar:hover .sidebar-row {
+                justify-content: flex-start;
+                padding: 0 var(--s-3);
+                width: auto; height: 36px;
+            }
+            .sidebar:hover .sidebar-row-delete {
+                position: static;
+                width: auto;
+                height: auto;
+                padding: 2px 4px;
+                display: inline-flex;
+                border-radius: var(--radius-xs);
+                background: none;
+                pointer-events: auto;
+            }
+        }
+
+        /* Mobile: sidebar → drawer */
+        @media (max-width: 639px) {
+            .app-shell {
+                inset: 0;
+                border-radius: 0;
+                border: none;
+            }
+            .sidebar {
+                position: fixed;
+                left: 0; top: 0; bottom: 0;
+                transform: translateX(-100%);
+                z-index: 30;
+                border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+                width: 280px;
+                min-width: 280px;
+                padding: var(--s-5);
+                align-items: stretch;
+                transition: transform 200ms ease-out;
+            }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar .sidebar-section-label,
+            .sidebar .sidebar-row-label,
+            .sidebar .sidebar-row-delete,
+            .sidebar .btn-new-chat span,
+            .sidebar .btn-delete-all-label { display: initial; }
+            .sidebar .sidebar-brand { justify-content: flex-start; }
+            .sidebar .btn-new-chat {
+                width: 100%; height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+            .sidebar .btn-delete-all {
+                width: 100%;
+                height: auto;
+                justify-content: flex-start;
+                padding: var(--s-2) var(--s-3);
+            }
+            .sidebar .sidebar-row {
+                justify-content: flex-start;
+                padding: 0 var(--s-3);
+                width: auto; height: 36px;
+            }
+
+            .mobile-menu-btn {
+                display: flex !important;
+                position: fixed;
+                top: var(--s-3);
+                left: var(--s-3);
+                z-index: 25;
+                width: 40px; height: 40px;
+                border-radius: var(--radius-sm);
+                background: var(--panel-bg);
+                border: 1px solid var(--stroke);
+                color: var(--text);
+                font-size: 20px;
+                cursor: pointer;
+                align-items: center;
+                justify-content: center;
+            }
+            .top-bar { padding-left: 60px; }
+
+            /* Toolbars pinned outside the bubble clip off-screen on narrow viewports —
+               flow them below the message and keep them always visible (no hover on touch). */
+            .message { max-width: 85%; }
+            .msg-toolbar {
+                position: static;
+                opacity: 1;
+                margin-top: 4px;
+                justify-content: flex-end;
+            }
+            .message.assistant .msg-toolbar { left: auto; justify-content: flex-start; }
+            .message.user .msg-toolbar { right: auto; justify-content: flex-end; }
+            .msg-toolbar button {
+                width: 36px;
+                height: 36px;
+            }
+            .msg-toolbar .gen-count { min-width: 32px; }
+        }
+
+        /* Feature grid: 1 col under 720px — removed */
+
+        /* Desktop: sidebar toggle collapse to icon rail */
+        @media (min-width: 1024px) {
+            .sidebar {
+                transition: width 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                            min-width 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                            padding 250ms ease-out;
+                overflow: hidden;
+            }
+            .sidebar.collapsed {
+                width: 64px;
+                min-width: 64px;
+                padding: var(--s-3);
+                align-items: center;
+            }
+            .sidebar.collapsed .sidebar-section-label,
+            .sidebar.collapsed .sidebar-row-label,
+            .sidebar.collapsed .btn-new-chat > span:nth-child(2),
+            .sidebar.collapsed .btn-delete-all-label { display: none; }
+            .sidebar.collapsed .sidebar-brand { justify-content: center; margin-bottom: var(--s-4); }
+            .sidebar.collapsed .btn-new-chat {
+                width: 40px; height: 40px;
+                justify-content: center;
+                padding: 0;
+                font-size: 16px;
+            }
+            .sidebar.collapsed .btn-delete-all {
+                width: 40px; height: 40px;
+                justify-content: center;
+                padding: 0;
+            }
+            .sidebar.collapsed .sidebar-row {
+                justify-content: center;
+                padding: 0;
+                width: 40px; height: 40px;
+                position: relative;
+            }
+            .sidebar.collapsed .sidebar-row-icon { margin: 0; }
+            .sidebar.collapsed .sidebar-row-delete {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 14px;
+                height: 14px;
+                padding: 0;
+                font-size: 10px;
+                border-radius: 999px;
+                background: rgba(13,20,36,0.85);
+                opacity: 0;
+                pointer-events: none;
+            }
+            .sidebar.collapsed .sidebar-row:hover .sidebar-row-delete,
+            .sidebar.collapsed .sidebar-row:focus-within .sidebar-row-delete {
+                opacity: 0.9;
+                pointer-events: auto;
+            }
+            /* Tooltip on collapsed sidebar rows */
+            .sidebar.collapsed .sidebar-row::after {
+                content: attr(data-title);
+                position: absolute;
+                left: 52px;
+                background: var(--panel-bg);
+                border: 1px solid var(--stroke);
+                border-radius: var(--radius-sm);
+                padding: 6px 10px;
+                font-size: var(--text-xs);
+                color: var(--text);
+                white-space: nowrap;
+                z-index: 30;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 150ms ease-out;
+            }
+            .sidebar.collapsed .sidebar-row:hover::after {
+                opacity: 1;
+            }
+            .sidebar.collapsed .sidebar-separator { margin: var(--s-1) 0; }
+        }
+
+        .mobile-menu-btn { display: none; }

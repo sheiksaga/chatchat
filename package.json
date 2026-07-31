@@ -1,0 +1,33 @@
+{
+  "name": "chatchat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "format": "npx prettier --write js/ css/ *.html"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sheiksaga/chatchat.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sheiksaga/chatchat/issues"
+  },
+  "homepage": "https://github.com/sheiksaga/chatchat#readme",
+  "dependencies": {
+    "dompurify": "^3.0.9",
+    "highlight.js": "^11.9.0",
+    "marked": "^11.1.1",
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "prettier": "^3.9.6"
+  }
+}

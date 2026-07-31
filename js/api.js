@@ -115,3 +115,46 @@ function disableInputs(disabled) {
     sendBtns.forEach(b => b.disabled = disabled);
     document.getElementById('chat-input') && (document.getElementById('chat-input').disabled = disabled);
 }
+
+/**
+ * One-shot, non-streaming completion — for text the user never sees as prose
+ * (scene summaries, prompt building) rather than a chat turn.
+ * @param {Array<{role:string, content:string}>} messages
+ * @param {{maxTokens?:number, temperature?:number, signal?:AbortSignal, onRetry?:Function}} [opts]
+ * @returns {Promise<string>} Trimmed assistant text
+ */
+async function requestCompletion(messages, opts) {
+    opts = opts || {};
+    const body = JSON.stringify({
+        model: selectedModel || undefined,
+        messages: messages,
+        temperature: opts.temperature != null ? opts.temperature : 0.4,
+        max_tokens: opts.maxTokens || 200,
+        stream: false
+    });
+
+    for (let attempt = 0; ; attempt++) {
+        const response = await fetch(`${API_BASE}/chat/completions`, {
+            method: 'POST',
+            headers: apiHeaders(),
+            body: body,
+            signal: opts.signal
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return (data.choices?.[0]?.message?.content || '').trim();
+        }
+
+        if (response.status === 429 && attempt === 0) {
+            const after = parseInt(response.headers.get('Retry-After') || '', 10);
+            const waitMs = Math.min(Number.isFinite(after) ? after * 1000 : 2000, 10000);
+            if (typeof opts.onRetry === 'function') opts.onRetry(waitMs);
+            await new Promise(r => setTimeout(r, waitMs));
+            if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+            continue;
+        }
+
+        throw new Error(await apiErrorDetail(response));
+    }
+}

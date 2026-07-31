@@ -8,11 +8,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <link rel="stylesheet" href="css/style.css">
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <link rel="stylesheet" href="vendor/github-dark.min.css">
+    <script src="vendor/highlight.min.js"></script>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/reset-world.css">
+    <link rel="stylesheet" href="css/sidebar.css">
+    <link rel="stylesheet" href="css/shell-topbar.css">
+    <link rel="stylesheet" href="css/hero.css">
+    <link rel="stylesheet" href="css/chat-messages.css">
+    <link rel="stylesheet" href="css/code-blocks.css">
+    <link rel="stylesheet" href="css/config.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
     <!-- ══════════════════════════════════════════════════════════════
@@ -288,11 +297,16 @@
     <!-- Screen-reader announcer: completed assistant responses only (not per-token spam) -->
     <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <script src="js/state.js"></script>
+    <script src="js/dom.js"></script>
+    <script src="js/imagestore.js"></script>
     <script src="js/view.js"></script>
     <script src="js/api.js"></script>
     <script src="js/models.js"></script>
+    <script src="js/imageprofile.js"></script>
     <script src="js/config.js"></script>
     <script src="js/chatlist.js"></script>
+    <script src="js/scene-prompt.js"></script>
+    <script src="js/images.js"></script>
     <script src="js/messages.js"></script>
     <script src="js/generations.js"></script>
     <script src="js/chat.js"></script>
