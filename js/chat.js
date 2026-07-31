@@ -166,7 +166,7 @@ async function streamAssistantResponse() {
         // Hide stop button, show send
         document.querySelectorAll('.btn-stop').forEach(b => b.classList.add('hidden'));
         document.querySelectorAll('.btn-send').forEach(b => b.classList.remove('hidden'));
-        localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+        safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
         renderChatList();
     }
 }
@@ -180,14 +180,14 @@ async function sendMessage(text) {
     if (!currentChatId) startNewChat();
 
     // Ensure current chat ID is registered in the chat index in localStorage
-    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+    const chats = safeGetJSON('chat_index', []);
     if (!chats.includes(currentChatId)) {
         chats.push(currentChatId);
-        localStorage.setItem('chat_index', JSON.stringify(chats));
+        safeSetItem('chat_index', JSON.stringify(chats));
         // Ensure metadata exists for newly registered chats
-        const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+        const meta = safeGetJSON(CHAT_META_KEY, {});
         if (!meta[currentChatId]) meta[currentChatId] = { createdAt: Date.now(), lastMode: currentMode };
-        localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+        safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     }
 
     showChatView();
@@ -302,7 +302,7 @@ async function compressHistory() {
             generationIdx = newIdx;
             saveGenerations();
 
-            localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+            safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
             renderMessages();
         }
     } catch (err) {

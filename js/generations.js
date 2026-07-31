@@ -18,7 +18,7 @@ async function regenerateMessage(msgIndex) {
 
     // Truncate chatHistory: remove this assistant message and everything after
     chatHistory = chatHistory.slice(0, msgIndex);
-    localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+    safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
 
     // Re-render to show truncated view
     renderMessages();
@@ -34,7 +34,7 @@ async function regenerateMessage(msgIndex) {
         if (restored !== undefined) {
             chatHistory.push({ role: 'assistant', content: restored });
             generationIdx[msgIndex] = list.length - 1;
-            localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+            safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
         }
         renderMessages();
         return;
@@ -45,7 +45,7 @@ async function regenerateMessage(msgIndex) {
     if (!list.includes(newContent)) list.push(newContent);
     generationIdx[msgIndex] = list.indexOf(newContent);
     saveGenerations();
-    localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+    safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
     renderMessages();
 }
 
@@ -63,7 +63,7 @@ function cycleGeneration(msgIndex, direction) {
 
     generationIdx[msgIndex] = newSlot;
     saveGenerations();
-    localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+    safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
     renderMessages();
 
     // Trigger bounce after DOM paint

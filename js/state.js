@@ -16,8 +16,7 @@ let activeProviderId = localStorage.getItem('active_provider') || 'local';
 /** Resolve a provider's effective config (default baseUrl + any saved key/override). */
 function getProviderConfig(id) {
     const base = API_PROVIDERS[id] || API_PROVIDERS.local;
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem('provider_cfg_' + id) || '{}'); } catch (e) {}
+    const saved = safeGetJSON('provider_cfg_' + id, {}) || {};
     return {
         id: API_PROVIDERS[id] ? id : 'local',
         label: base.label,
@@ -45,7 +44,7 @@ function apiHeaders(extra) {
 function setActiveProvider(id) {
     if (!API_PROVIDERS[id]) return;
     activeProviderId = id;
-    localStorage.setItem('active_provider', id);
+    safeSetItem('active_provider', id);
     API_BASE = getProviderConfig(id).baseUrl;
 }
 
@@ -54,7 +53,7 @@ function saveProviderConfig(id, cfg) {
     if (!API_PROVIDERS[id]) return;
     const existing = getProviderConfig(id);
     const merged = Object.assign({ baseUrl: existing.baseUrl, key: existing.key }, cfg || {});
-    localStorage.setItem('provider_cfg_' + id, JSON.stringify(merged));
+    safeSetItem('provider_cfg_' + id, JSON.stringify(merged));
     if (id === activeProviderId) API_BASE = merged.baseUrl;
 }
 
@@ -65,10 +64,10 @@ function migrateData() {
     const version = parseInt(localStorage.getItem('data_version') || '0');
     if (version < 1) {
         // v0 → v1: initial migration marker
-        localStorage.setItem('data_version', '1');
+        safeSetItem('data_version', '1');
     }
     // v1 → current: migrate old flat storyConfig character string to array
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     let changed = false;
     for (const chatId in meta) {
         if (meta[chatId]?.storyConfig && typeof meta[chatId].storyConfig.characters === 'string') {
@@ -105,7 +104,7 @@ function migrateData() {
         }
     }
     if (changed) {
-        localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+        safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     }
 }
 
@@ -150,6 +149,7 @@ const apiParams = {
  */
 function safeSetItem(key, value) {
     try {
+        // The one place a raw setItem is correct — this is the wrapper.
         localStorage.setItem(key, value);
     } catch (e) {
         if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {

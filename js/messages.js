@@ -242,7 +242,7 @@ async function renderImageMessage(div, msg) {
  */
 function saveGenerations() {
     if (currentChatId) {
-        localStorage.setItem(GENERATIONS_PREFIX + currentChatId, JSON.stringify(generationStore));
+        safeSetItem(GENERATIONS_PREFIX + currentChatId, JSON.stringify(generationStore));
     }
 }
 
@@ -281,7 +281,7 @@ function editMessage(index) {
                 chatHistory = chatHistory.slice(0, index + 1);
                 saveGenerations();
             }
-            localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+            safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
         }
         renderMessages();
         // Auto-generate new response for the edited prompt
@@ -319,7 +319,7 @@ function deleteMessage(index) {
     for (const key in generationIdx) delete generationIdx[key];
     Object.assign(generationIdx, newIdx);
 
-    localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+    safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
     saveGenerations();
     renderMessages();
 }
@@ -330,8 +330,8 @@ function deleteMessage(index) {
 
 /** Download all chats as a JSON file */
 function exportChats() {
-    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const chats = safeGetJSON('chat_index', []);
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     const data = {
         version: DATA_VERSION,
         exportedAt: new Date().toISOString(),
@@ -341,8 +341,8 @@ function exportChats() {
     };
     chats.forEach(id => {
         data.chats[id] = {
-            history: JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + id) || '[]'),
-            generations: JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + id) || '{}')
+            history: safeGetJSON(STORAGE_KEY_PREFIX + id, []),
+            generations: safeGetJSON(GENERATIONS_PREFIX + id, {})
         };
     });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -364,32 +364,32 @@ function importChats(file) {
             if (!data.chats || !data.index) throw new Error('Invalid backup format');
 
             // Merge into existing storage (don't overwrite existing chats with same ID)
-            const existing = JSON.parse(localStorage.getItem('chat_index') || '[]');
+            const existing = safeGetJSON('chat_index', []);
             data.index.forEach(id => {
                 if (!existing.includes(id)) {
                     existing.push(id);
                     if (data.chats[id]) {
                         if (data.chats[id].history) {
-                            localStorage.setItem(STORAGE_KEY_PREFIX + id, JSON.stringify(data.chats[id].history));
+                            safeSetItem(STORAGE_KEY_PREFIX + id, JSON.stringify(data.chats[id].history));
                         }
                         if (data.chats[id].generations) {
-                            localStorage.setItem(GENERATIONS_PREFIX + id, JSON.stringify(data.chats[id].generations));
+                            safeSetItem(GENERATIONS_PREFIX + id, JSON.stringify(data.chats[id].generations));
                         }
                     }
                 }
             });
-            localStorage.setItem('chat_index', JSON.stringify(existing));
+            safeSetItem('chat_index', JSON.stringify(existing));
             if (data.meta) {
-                const existingMeta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+                const existingMeta = safeGetJSON(CHAT_META_KEY, {});
                 const merged = { ...data.meta, ...existingMeta };
-                localStorage.setItem(CHAT_META_KEY, JSON.stringify(merged));
+                safeSetItem(CHAT_META_KEY, JSON.stringify(merged));
             }
             showToast('Chats imported successfully', 'success');
             // Reload to pick up imported chats
             if (existing.length > 0) {
                 currentChatId = existing[existing.length - 1];
-                chatHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + currentChatId) || '[]');
-                generationStore = JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + currentChatId) || '{}');
+                chatHistory = safeGetJSON(STORAGE_KEY_PREFIX + currentChatId, []);
+                generationStore = safeGetJSON(GENERATIONS_PREFIX + currentChatId, {});
                 generationIdx = {};
             }
             renderChatList();

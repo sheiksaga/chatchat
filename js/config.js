@@ -28,7 +28,7 @@ function initSliders() {
         widthSlider.addEventListener('input', () => {
             document.documentElement.style.setProperty('--content-max-width', widthSlider.value + 'px');
             if (widthVal) widthVal.textContent = widthSlider.value;
-            localStorage.setItem('pref_content_width', widthSlider.value);
+            safeSetItem('pref_content_width', widthSlider.value);
         });
     }
     const fontSlider = document.getElementById('pref-font');
@@ -37,7 +37,7 @@ function initSliders() {
         fontSlider.addEventListener('input', () => {
             document.documentElement.style.setProperty('--base-font-size', fontSlider.value + 'px');
             if (fontVal) fontVal.textContent = fontSlider.value;
-            localStorage.setItem('pref_font_size', fontSlider.value);
+            safeSetItem('pref_font_size', fontSlider.value);
         });
     }
 

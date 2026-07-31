@@ -7,13 +7,13 @@
  */
 function renderChatList() {
     const list = document.getElementById('sidebar-chat-list');
-    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const chats = safeGetJSON('chat_index', []);
+    const meta = safeGetJSON(CHAT_META_KEY, {});
 
     list.querySelectorAll('.sidebar-row.chat-entry').forEach(el => el.remove());
 
     chats.slice().reverse().forEach(chatId => {
-        const msgs = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + chatId) || '[]');
+        const msgs = safeGetJSON(STORAGE_KEY_PREFIX + chatId, []);
         const firstUser = msgs.find(m => m.role === 'user');
         const storedName = meta[chatId]?.name;
         const title = storedName || (firstUser ? firstUser.content.slice(0, 40) : 'Empty chat');
@@ -69,20 +69,20 @@ function renderChatList() {
 function switchChat(chatId) {
     if (chatId === currentChatId) return;
     if (currentChatId && chatHistory.length > 0) {
-        localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
-        localStorage.setItem(GENERATIONS_PREFIX + currentChatId, JSON.stringify(generationStore));
-        const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+        safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+        safeSetItem(GENERATIONS_PREFIX + currentChatId, JSON.stringify(generationStore));
+        const chats = safeGetJSON('chat_index', []);
         if (!chats.includes(currentChatId)) {
             chats.push(currentChatId);
-            localStorage.setItem('chat_index', JSON.stringify(chats));
+            safeSetItem('chat_index', JSON.stringify(chats));
         }
     }
     currentChatId = chatId;
-    chatHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + chatId) || '[]');
-    generationStore = JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + chatId) || '{}');
+    chatHistory = safeGetJSON(STORAGE_KEY_PREFIX + chatId, []);
+    generationStore = safeGetJSON(GENERATIONS_PREFIX + chatId, {});
     generationIdx = {};
     // Load story config and mode for this chat
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     storyConfig = meta[chatId]?.storyConfig || { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
     currentMode = meta[chatId]?.lastMode || 'chat';
     renderChatList();
@@ -104,18 +104,18 @@ function switchChat(chatId) {
  */
 function startNewChat() {
     if (currentChatId && chatHistory.length > 0) {
-        localStorage.setItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
-        const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+        safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+        const chats = safeGetJSON('chat_index', []);
         if (!chats.includes(currentChatId)) {
             chats.push(currentChatId);
-            localStorage.setItem('chat_index', JSON.stringify(chats));
+            safeSetItem('chat_index', JSON.stringify(chats));
         }
     }
     currentChatId = Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
     // Store chat metadata (creation timestamp)
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     meta[currentChatId] = { createdAt: Date.now(), lastMode: currentMode };
-    localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     chatHistory = [];
     generationStore = {};
     generationIdx = {};
@@ -128,11 +128,11 @@ function startNewChat() {
  * @param {string} chatId
  */
 function deleteChat(chatId) {
-    let chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+    let chats = safeGetJSON('chat_index', []);
     const idx = chats.indexOf(chatId);
 
     // Snapshot everything about this chat so the delete can be undone.
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     const snapshot = {
         chatId: chatId,
         position: idx,
@@ -143,22 +143,22 @@ function deleteChat(chatId) {
     };
 
     if (idx >= 0) chats.splice(idx, 1);
-    localStorage.setItem('chat_index', JSON.stringify(chats));
+    safeSetItem('chat_index', JSON.stringify(chats));
     localStorage.removeItem(STORAGE_KEY_PREFIX + chatId);
     localStorage.removeItem(GENERATIONS_PREFIX + chatId);
 
     // Clean up chat meta
     delete meta[chatId];
-    localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
 
     if (chatId === currentChatId) {
         if (chats.length > 0) {
             currentChatId = chats[chats.length - 1];
-            chatHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + currentChatId) || '[]');
-            generationStore = JSON.parse(localStorage.getItem(GENERATIONS_PREFIX + currentChatId) || '{}');
+            chatHistory = safeGetJSON(STORAGE_KEY_PREFIX + currentChatId, []);
+            generationStore = safeGetJSON(GENERATIONS_PREFIX + currentChatId, {});
             generationIdx = {};
             // Load the fallback chat's story config / mode instead of keeping the deleted chat's
-            const meta2 = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+            const meta2 = safeGetJSON(CHAT_META_KEY, {});
             storyConfig = meta2[currentChatId]?.storyConfig || { style: 'cyoa', scene: '', characters: [], tags: '', firstPrompt: '' };
             currentMode = meta2[currentChatId]?.lastMode || 'chat';
         } else {
@@ -192,18 +192,18 @@ function deleteChat(chatId) {
  * @param {{chatId:string, position:number, wasCurrent:boolean, history:?string, generations:?string, meta:?object}} snap
  */
 function restoreDeletedChat(snap) {
-    const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+    const chats = safeGetJSON('chat_index', []);
     if (!chats.includes(snap.chatId)) {
         const pos = (snap.position >= 0 && snap.position <= chats.length) ? snap.position : chats.length;
         chats.splice(pos, 0, snap.chatId);
-        localStorage.setItem('chat_index', JSON.stringify(chats));
+        safeSetItem('chat_index', JSON.stringify(chats));
     }
-    if (snap.history != null) localStorage.setItem(STORAGE_KEY_PREFIX + snap.chatId, snap.history);
-    if (snap.generations != null) localStorage.setItem(GENERATIONS_PREFIX + snap.chatId, snap.generations);
+    if (snap.history != null) safeSetItem(STORAGE_KEY_PREFIX + snap.chatId, snap.history);
+    if (snap.generations != null) safeSetItem(GENERATIONS_PREFIX + snap.chatId, snap.generations);
     if (snap.meta) {
-        const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+        const meta = safeGetJSON(CHAT_META_KEY, {});
         meta[snap.chatId] = snap.meta;
-        localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+        safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     }
     renderChatList();
     // If the deleted chat had been the active one, switch back to it.
@@ -249,12 +249,12 @@ function deleteAllChats() {
     showConfirmDialog('Delete all chats? This cannot be undone.', {
         confirmLabel: 'Delete All',
         onConfirm: () => {
-            const chats = JSON.parse(localStorage.getItem('chat_index') || '[]');
+            const chats = safeGetJSON('chat_index', []);
             chats.forEach(id => {
                 localStorage.removeItem(STORAGE_KEY_PREFIX + id);
                 localStorage.removeItem(GENERATIONS_PREFIX + id);
             });
-            localStorage.setItem('chat_index', '[]');
+            safeSetItem('chat_index', '[]');
             localStorage.removeItem(CHAT_META_KEY);
             currentChatId = null;
             chatHistory = [];
@@ -271,13 +271,13 @@ function deleteAllChats() {
  * Rename a chat (triggered by double-click or context menu).
  */
 function renameChat(chatId) {
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     const current = meta[chatId]?.name || '';
     const newName = prompt('Rename chat:', current);
     if (newName === null) return; // cancelled
     if (!meta[chatId]) meta[chatId] = {};
     meta[chatId].name = newName.trim() || undefined;
     if (!meta[chatId].name) delete meta[chatId].name;
-    localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     renderChatList();
 }

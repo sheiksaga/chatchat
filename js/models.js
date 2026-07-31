@@ -133,7 +133,7 @@ async function selectModel(modelId) {
     // Cloud providers (OpenAI-compatible) have no load/unload lifecycle — just select.
     if (!currentProvider().isLocal) {
         selectedModel = modelId;
-        localStorage.setItem('selectedModel', modelId);
+        safeSetItem('selectedModel', modelId);
         nameEl.textContent = modelId;
         resetIdleTimer();
         updateEjectButton();
@@ -162,14 +162,14 @@ async function selectModel(modelId) {
         });
 
         selectedModel = modelId;
-        localStorage.setItem('selectedModel', modelId);
+        safeSetItem('selectedModel', modelId);
         nameEl.textContent = modelId;
     } catch (err) {
         console.error('Failed to load model: ', err);
         showToast(`Model load failed: ${err.message}. Inference will trigger auto-load.`, 'error');
         // Fallback: set it anyway (inference call will trigger load if load endpoint failed)
         selectedModel = modelId;
-        localStorage.setItem('selectedModel', modelId);
+        safeSetItem('selectedModel', modelId);
         nameEl.textContent = modelId;
     } finally {
         selectorEl.classList.remove('loading');
@@ -255,7 +255,7 @@ async function fetchModelProfile(modelId) {
         if (topPMatch) params.top_p = parseFloat(topPMatch[1]);
         if (topKMatch) params.top_k = parseInt(topKMatch[1]);
         if (repMatch) params.repetitionPenalty = parseFloat(repMatch[1]);
-        localStorage.setItem(cacheKey, JSON.stringify(params));
+        safeSetItem(cacheKey, JSON.stringify(params));
         return params;
     } catch (e) {
         return null;

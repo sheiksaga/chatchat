@@ -261,10 +261,10 @@ function setMode(mode) {
 
     // Persist the chosen mode so it survives reloads / chat switches.
     if (currentChatId) {
-        const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+        const meta = safeGetJSON(CHAT_META_KEY, {});
         if (!meta[currentChatId]) meta[currentChatId] = { createdAt: Date.now() };
         meta[currentChatId].lastMode = mode;
-        localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+        safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
     }
 
     if (typeof refreshHeroSendButton === 'function') refreshHeroSendButton();
@@ -326,10 +326,10 @@ function closeStorySettings() {
 /** Persist story config to current chat metadata */
 function saveStoryConfig() {
     if (!currentChatId) return;
-    const meta = JSON.parse(localStorage.getItem(CHAT_META_KEY) || '{}');
+    const meta = safeGetJSON(CHAT_META_KEY, {});
     if (!meta[currentChatId]) meta[currentChatId] = { createdAt: Date.now() };
     meta[currentChatId].storyConfig = { ...storyConfig };
-    localStorage.setItem(CHAT_META_KEY, JSON.stringify(meta));
+    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
 }
 
 /**
