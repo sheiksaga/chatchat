@@ -281,17 +281,56 @@ function toggleConfig() {
   }
 }
 
-/** Toggle the sidebar between expanded and collapsed (icon-rail). */
+/**
+ * Toggle the sidebar.
+ * On mobile/tablet (< 1024px): overlay slides in from left with backdrop.
+ * On desktop (>= 1024px): collapse to narrow icon rail.
+ */
 function toggleSidebar() {
-  document.getElementById("sidebar").classList.toggle("collapsed");
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
+
+  if (isDesktop) {
+    sidebar.classList.toggle("collapsed");
+  } else {
+    // Mobile/tablet overlay mode
+    const isOpen = sidebar.classList.contains("open");
+    if (isOpen) {
+      closeSidebar();
+    } else {
+      sidebar.classList.add("open");
+      if (backdrop) backdrop.classList.add("visible");
+      // Focus the sidebar for keyboard nav
+      sidebar.querySelector(".btn-new-chat")?.focus();
+    }
+  }
+}
+
+/** Close the mobile sidebar overlay. */
+function closeSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  sidebar.classList.remove("open");
+  if (backdrop) backdrop.classList.remove("visible");
+  // Return focus to the hamburger
+  document.querySelector(".mobile-menu-btn")?.focus();
 }
 
 // Global escape key handler: close panels and dropdowns
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    const sidebar = document.getElementById("sidebar");
     const panel = document.getElementById("config-panel");
     const dropdown = document.getElementById("model-dropdown");
     const storyOverlay = document.getElementById("story-settings-overlay");
+
+    // Close sidebar overlay first (mobile/tablet)
+    if (sidebar && sidebar.classList.contains("open")) {
+      closeSidebar();
+      return;
+    }
+
     if (storyOverlay) {
       closeStorySettings();
       document.getElementById("edit-story-btn")?.focus();

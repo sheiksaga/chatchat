@@ -89,7 +89,11 @@ function renderChatList() {
  * @param {string} chatId
  */
 function switchChat(chatId) {
-  if (chatId === currentChatId) return;
+  if (chatId === currentChatId) {
+    // Still close mobile sidebar if open (user tapped same chat)
+    if (typeof closeSidebar === "function") closeSidebar();
+    return;
+  }
   if (currentChatId && chatHistory.length > 0) {
     safeSetItem(
       STORAGE_KEY_PREFIX + currentChatId,
@@ -131,6 +135,9 @@ function switchChat(chatId) {
   } else {
     showHeroView();
   }
+
+  // Close mobile sidebar overlay after switching
+  if (typeof closeSidebar === "function") closeSidebar();
 }
 
 /**
@@ -159,6 +166,9 @@ function startNewChat() {
   generationIdx = {};
   renderChatList();
   showHeroView();
+
+  // Close mobile sidebar overlay
+  if (typeof closeSidebar === "function") closeSidebar();
 }
 
 /**

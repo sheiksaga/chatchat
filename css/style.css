@@ -1,20 +1,22 @@
 /* ══════════════════════════════════════════════════════════════
-   style.css — Skeleton styles
+   style.css — Responsive skeleton styles
    ══════════════════════════════════════════════════════════════
 
-   Deliberately minimal. This replaces ~2,290 lines of decorative CSS
-   that had drifted out of sync with the markup. The rule for what
-   belongs here: styling that carries BEHAVIOUR, not appearance.
+   Mobile-first. Behaviour-critical rules are marked [FUNCTIONAL] —
+   the app or its tests break without them.
 
-   Behaviour-critical rules are marked [FUNCTIONAL] — the app or its
-   tests break without them. Everything else is the least styling
-   needed to keep the UI legible and usable.
+   Breakpoints:
+     Base      < 480px   phones
+     sm        480px+    large phones / tiny windows
+     md        768px+    tablets / small laptops
+     lg        1024px+   MacBook 13"-15" / Windows laptops
+     xl        1440px+   large desktop displays
 
    Sections:
-     1. Base + tokens        5. Hero / landing
-     2. Visibility           6. Messages
-     3. App shell            7. Overlays, dropdowns, toasts
-     4. Sidebar              8. Forms and buttons
+     1. Base + tokens          5. Hero / landing
+     2. Visibility             6. Messages
+     3. App shell + top-bar    7. Overlays, dropdowns, toasts
+     4. Sidebar                8. Forms, buttons, panels
    ══════════════════════════════════════════════════════════════ */
 
 /* ── 1. Base + tokens ─────────────────────────────────────────── */
@@ -28,6 +30,10 @@
   --accent: #6ea8fe;
   --radius: 8px;
   --gap: 12px;
+  --sidebar-w: 240px;
+  --sidebar-collapsed-w: 0px;
+  --sidebar-overlay-w: min(85vw, 320px);
+  --tap-min: 44px; /* WCAG 2.5.5 target size */
 }
 
 *,
@@ -36,13 +42,18 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   height: 100%;
-  margin: 0;
+  /* Firefox: prevent pull-to-refresh from hijacking scroll */
+  overscroll-behavior: none;
 }
 
 body {
+  height: 100%;
+  /* Use dynamic viewport height so mobile browser chrome doesn't
+     clip the bottom of the app */
+  height: 100dvh;
+  margin: 0;
   background: var(--bg);
   color: var(--text);
   font:
@@ -50,36 +61,70 @@ body {
     -apple-system,
     "Segoe UI",
     sans-serif;
+  /* Firefox: consistent scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) var(--bg);
+  /* Prevent overscroll rubber-banding from revealing white */
+  overscroll-behavior: none;
 }
 
-/* The decorative parallax layers are inert markup now. Kept in the DOM
-   (they are aria-hidden) but not painted. */
-.world {
-  display: none;
+/* ── 1a. Firefox-specific scrollbar for inner containers ─────── */
+
+#sidebar-chat-list,
+.messages-area,
+.hero-region,
+.model-dropdown.open,
+.top-bar-settings.open {
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) transparent;
 }
 
 /* ── 2. Visibility ────────────────────────────────────────────── */
 
-/* [FUNCTIONAL] Every view toggle in the app routes through .hidden —
-   view.js, the dropdowns, the stop/send button swap, story config. */
+/* [FUNCTIONAL] Every view toggle in the app routes through .hidden */
 .hidden {
   display: none !important;
 }
 
-/* ── 3. App shell ─────────────────────────────────────────────── */
+/* ── 3. App shell + top-bar ───────────────────────────────────── */
+
+/* Sidebar backdrop — invisible by default, shown when sidebar overlays */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgba(0, 0, 0, 0.45);
+  /* Fade in */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.sidebar-backdrop.visible {
+  display: block;
+  opacity: 1;
+}
 
 .app-shell {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  /* Safe-area insets for notched phones */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .main-pane {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0; /* let long content shrink instead of forcing overflow */
+  min-width: 0;
+  /* Firefox: without this a flex child can refuse to shrink below
+     its content's intrinsic size */
+  min-height: 0;
 }
+
+/* ── 3a. Top bar ──────────────────────────────────────────────── */
 
 .top-bar {
   display: flex;
@@ -88,22 +133,26 @@ body {
   gap: var(--gap);
   padding: 8px var(--gap);
   border-bottom: 1px solid var(--stroke);
+  flex-shrink: 0;
+  /* On mobile the hamburger is fixed at top-left, so push content right */
 }
 
 .top-bar-left,
 .top-bar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   position: relative; /* anchor for dropdowns inside */
+  min-width: 0; /* allow children to truncate */
 }
 
 .top-pill {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  font-size: 0.9em;
+  padding: 6px 10px;
+  font-size: 0.88em;
+  white-space: nowrap;
 }
 
 .pill-chevron,
@@ -113,10 +162,9 @@ body {
   color: var(--muted);
 }
 
-/* Image model selector — separated from text model with a subtle divider */
 .image-model-pill {
   border-left: 1px solid var(--stroke);
-  padding-left: 10px;
+  padding-left: 8px;
   margin-left: 2px;
 }
 
@@ -128,23 +176,27 @@ body {
 
 /* ── 4. Sidebar ───────────────────────────────────────────────── */
 
-/* Sidebar toggle — hidden on desktop (sidebar always open).
-   Shown on mobile inside the overlay drawer. */
+/* Sidebar toggle button (inside sidebar) — only shown on mobile overlay */
 .sidebar-toggle {
   display: none;
 }
 
 .sidebar {
   display: flex;
-  flex: 0 0 240px;
+  flex: 0 0 var(--sidebar-w);
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 4px;
   padding: 8px 0;
   background: var(--panel);
   border-right: 1px solid var(--stroke);
   overflow-y: auto;
+  /* Firefox scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) transparent;
+  /* Transition for collapse / overlay slide */
+  transition: flex-basis 0.25s ease, transform 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
 .sidebar-brand {
@@ -169,6 +221,7 @@ body {
   font-size: 0.9em;
   cursor: pointer;
   align-self: stretch;
+  min-height: var(--tap-min);
 }
 .btn-new-chat:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -179,20 +232,12 @@ body {
   max-height: 50vh;
   width: 100%;
   overflow-y: auto;
+  /* Firefox: allow this to shrink */
+  min-height: 0;
 }
 
 .sidebar-spacer {
   display: none;
-}
-
-/* [FUNCTIONAL] Collapsed → zero-width. */
-.sidebar.collapsed {
-  flex: 0 0 0;
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  overflow: hidden;
 }
 
 .sidebar-row {
@@ -202,6 +247,7 @@ body {
   padding: 8px 10px;
   cursor: pointer;
   align-self: stretch;
+  min-height: var(--tap-min);
 }
 
 .sidebar-row:hover {
@@ -217,6 +263,37 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
   text-align: left;
+}
+
+.sidebar-row-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Inline action buttons on sidebar rows (rename, delete) */
+.sidebar-row-rename,
+.sidebar-row-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sidebar-row-rename:hover {
+  color: var(--text);
+  border-color: var(--stroke);
+}
+.sidebar-row-delete:hover {
+  color: #d97474;
+  border-color: rgba(217, 116, 116, 0.3);
 }
 
 .sidebar-separator {
@@ -247,6 +324,7 @@ body {
   cursor: pointer;
   flex: 1;
   justify-content: center;
+  min-height: 36px;
 }
 .btn-sidebar-io:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -267,6 +345,7 @@ body {
   font-size: 0.85em;
   cursor: pointer;
   align-self: stretch;
+  min-height: var(--tap-min);
 }
 .btn-delete-all:hover {
   color: #d97474;
@@ -282,6 +361,19 @@ body {
   text-align: left;
 }
 
+/* ── 4a. Sidebar collapsed state (desktop only) ───────────────── */
+
+/* On desktop, collapsed shrinks sidebar to a narrow rail.
+   The meaning of .collapsed changes via media queries below. */
+.sidebar.collapsed {
+  flex: 0 0 var(--sidebar-collapsed-w);
+  width: var(--sidebar-collapsed-w);
+  min-width: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
 /* ── 5. Hero / landing ────────────────────────────────────────── */
 
 .hero-region {
@@ -293,12 +385,15 @@ body {
   gap: var(--gap);
   padding: var(--gap);
   overflow-y: auto;
+  /* Firefox */
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) transparent;
 }
 
-/* Decorative orb on the hero screen */
 .orb {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: radial-gradient(
     circle at var(--mx, 32%) var(--my, 26%),
@@ -311,7 +406,7 @@ body {
   pointer-events: none;
 }
 
-/* Mode toggle pills on the hero screen */
+/* Mode toggle pills */
 .quick-actions {
   display: flex;
   gap: 8px;
@@ -323,7 +418,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 10px 18px;
   background: var(--panel);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
@@ -331,6 +426,7 @@ body {
   font: inherit;
   font-size: 0.9em;
   cursor: pointer;
+  min-height: var(--tap-min);
 }
 .quick-chip:hover {
   color: var(--text);
@@ -348,11 +444,13 @@ body {
   color: var(--accent);
 }
 
+/* Hero input */
 .hero-input-wrapper {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  width: min(680px, 100%);
+  width: 100%;
+  max-width: 680px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -366,6 +464,7 @@ body {
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   cursor: text;
+  min-width: 0;
 }
 
 .hero-input-textarea {
@@ -375,15 +474,16 @@ body {
   border: none;
   color: inherit;
   font: inherit;
+  font-size: 16px; /* prevent iOS zoom on focus */
   resize: none;
   outline: none;
 }
 
-/* Placeholder overlay is now unused — kept in the DOM for JS compatibility only */
 .hero-input-placeholder {
   display: none;
 }
 
+/* Prompt chips */
 .prompt-chips {
   display: flex;
   flex-wrap: wrap;
@@ -391,10 +491,11 @@ body {
   gap: 8px;
   margin-left: auto;
   margin-right: auto;
+  max-width: 100%;
 }
 
 .prompt-chip {
-  padding: 6px 14px;
+  padding: 8px 14px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
@@ -402,6 +503,9 @@ body {
   font: inherit;
   font-size: 0.88em;
   cursor: pointer;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
 }
 .prompt-chip:hover {
   color: var(--text);
@@ -417,6 +521,12 @@ body {
   gap: var(--gap);
   padding: var(--gap);
   overflow-y: auto;
+  /* Firefox */
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) transparent;
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior: contain;
 }
 
 .message {
@@ -425,6 +535,8 @@ body {
   padding: 8px 12px;
   border-radius: var(--radius);
   overflow-wrap: anywhere;
+  /* Firefox needs both for consistent word-breaking */
+  word-break: break-word;
 }
 
 .message.user {
@@ -452,16 +564,19 @@ body {
 
 .msg-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
 
 .msg-toolbar button {
-  padding: 2px 6px;
+  padding: 4px 8px;
   background: none;
   border: 1px solid var(--stroke);
   border-radius: 4px;
   color: var(--muted);
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
 }
 
 .gen-count {
@@ -469,8 +584,7 @@ body {
   font-size: 0.85em;
 }
 
-/* Story-mode text roles. Kept because JS adds these classes and the
-   distinction is meaningful, not decorative. */
+/* Story-mode text roles */
 .story-speech {
   color: #cfe3ff;
 }
@@ -482,7 +596,7 @@ body {
   color: #b9a7e0;
 }
 
-/* [FUNCTIONAL] renderImageMessage() targets these three exact names. */
+/* [FUNCTIONAL] renderImageMessage() targets these exact names */
 .message.message-image {
   padding: 4px;
 }
@@ -503,8 +617,7 @@ body {
   font-size: 0.85em;
 }
 
-/* Code blocks — overflow containment is functional; long lines would
-   otherwise force the whole page to scroll sideways. */
+/* Code blocks */
 .code-block-wrapper {
   margin: 0.5em 0;
   border: 1px solid var(--stroke);
@@ -525,16 +638,18 @@ body {
   margin: 0;
   padding: 8px;
   overflow-x: auto;
+  /* Firefox: consistent scrollbar inside code blocks */
+  scrollbar-width: thin;
+  scrollbar-color: var(--stroke) transparent;
 }
 
 .message code {
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: ui-monospace, Consolas, "SF Mono", monospace;
 }
 
 /* ── 7. Overlays, dropdowns, toasts ───────────────────────────── */
 
-/* [FUNCTIONAL] Dropdowns are now children of .top-bar-left / .top-bar-right
-   so position:absolute resolves against those positioned containers. */
+/* [FUNCTIONAL] Dropdowns hidden until .open */
 .model-dropdown,
 .top-bar-settings {
   display: none;
@@ -546,7 +661,7 @@ body {
   top: 100%;
   left: 0;
   z-index: 20;
-  min-width: 260px;
+  min-width: 240px;
   max-height: 70vh;
   padding: 10px;
   background: var(--panel);
@@ -578,8 +693,11 @@ body {
 }
 
 .model-dropdown-item {
-  padding: 6px 8px;
+  padding: 8px 10px;
   cursor: pointer;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
 }
 .model-dropdown-item:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -598,10 +716,12 @@ body {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
+  padding: 16px;
 }
 
 .story-settings-modal,
 .confirm-dialog {
+  width: 100%;
   max-width: min(560px, 92vw);
   max-height: 85vh;
   padding: 16px;
@@ -626,6 +746,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Safe area on notched phones */
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
 
 .toast {
@@ -633,6 +755,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
+  max-width: min(360px, 90vw);
 }
 
 .toast-error {
@@ -665,6 +788,11 @@ button:disabled {
   cursor: default;
 }
 
+/* Firefox: remove extra inner focus outline on buttons */
+button::-moz-focus-inner {
+  border: 0;
+}
+
 input,
 textarea,
 select {
@@ -687,14 +815,17 @@ select:focus {
 .btn-send {
   display: inline-flex;
   align-items: center;
-  padding: 6px 16px;
+  justify-content: center;
+  padding: 8px 18px;
   background: var(--accent);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: #fff;
   font: inherit;
-  font-size: 0.88em;
+  font-size: 0.9em;
   cursor: pointer;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
 }
 .btn-send:hover {
   background: #5b97e5;
@@ -704,17 +835,14 @@ select:focus {
   opacity: 0.5;
   cursor: default;
 }
-.hero-send-btn {
-  margin-left: auto;
-}
 
 /* Stop generation button */
 .btn-stop {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   padding: 0;
   background: var(--panel);
   border: 1px solid var(--stroke);
@@ -727,7 +855,7 @@ select:focus {
   border-color: var(--muted);
 }
 
-/* Eject (unload model) button in top bar */
+/* Eject button in top bar */
 .btn-eject {
   display: inline-flex;
   align-items: center;
@@ -738,19 +866,22 @@ select:focus {
   border-radius: var(--radius);
   color: var(--muted);
   cursor: pointer;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
 }
 .btn-eject:hover {
   color: var(--text);
 }
 
-/* Mini toggle pills (mode, provider, story style, etc.) */
+/* Mini toggle pills */
 .config-mode-pills {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .mini-pill {
-  padding: 4px 10px;
+  padding: 5px 10px;
   background: transparent;
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
@@ -758,6 +889,7 @@ select:focus {
   font: inherit;
   font-size: 0.82em;
   cursor: pointer;
+  min-height: 36px;
 }
 .mini-pill:hover {
   color: var(--text);
@@ -783,6 +915,7 @@ select:focus {
   font: inherit;
   font-size: 0.85em;
   cursor: pointer;
+  min-height: 36px;
 }
 .btn-compress:hover,
 .btn-add-char:hover {
@@ -797,6 +930,11 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  gap: 8px;
+}
+
+.settings-mode-row .settings-label {
+  flex-shrink: 0;
 }
 
 .settings-label {
@@ -816,7 +954,7 @@ select:focus {
   border-radius: var(--radius);
   color: var(--text);
   font: inherit;
-  font-size: 0.9em;
+  font-size: 16px; /* prevent iOS zoom */
   resize: vertical;
 }
 .settings-textarea:focus,
@@ -841,7 +979,7 @@ select:focus {
   font-size: 0.85em;
 }
 .settings-slider-row label {
-  min-width: 90px;
+  min-width: 80px;
   color: var(--muted);
 }
 .settings-slider-row input[type="range"] {
@@ -850,6 +988,7 @@ select:focus {
   background: transparent;
   border: none;
   padding: 0;
+  min-width: 0;
 }
 
 .settings-slider-val {
@@ -896,7 +1035,8 @@ select:focus {
 /* ── 8b. Story config form ────────────────────────────────────── */
 
 .story-config {
-  width: min(680px, 100%);
+  width: 100%;
+  max-width: 680px;
   margin-left: auto;
   margin-right: auto;
 }
@@ -928,6 +1068,7 @@ select:focus {
 
 .story-default-wrapper {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 4px 0 8px;
 }
@@ -994,6 +1135,7 @@ select:focus {
 
 .story-action-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 14px;
   padding-top: 10px;
@@ -1012,6 +1154,7 @@ select:focus {
   font: inherit;
   font-size: 0.8em;
   cursor: pointer;
+  min-height: 36px;
 }
 .btn-story-action:hover {
   color: var(--text);
@@ -1026,6 +1169,7 @@ select:focus {
   gap: 8px;
   padding: var(--gap);
   border-top: 1px solid var(--stroke);
+  flex-shrink: 0;
 }
 
 .chat-input-box {
@@ -1045,6 +1189,7 @@ select:focus {
   outline: none;
   color: inherit;
   font: inherit;
+  font-size: 16px; /* prevent iOS zoom */
   resize: none;
 }
 
@@ -1057,7 +1202,6 @@ select:focus {
 
 /* ── 8d. Toasts ───────────────────────────────────────────────── */
 
-/* Toast container anchored at top-center (for undo/action toasts) */
 .toast-top-container {
   position: fixed;
   top: 16px;
@@ -1068,6 +1212,7 @@ select:focus {
   flex-direction: column;
   gap: 8px;
   pointer-events: none;
+  max-width: calc(100vw - 32px);
 }
 .toast-top-container .toast {
   pointer-events: auto;
@@ -1087,9 +1232,7 @@ select:focus {
   border: 0;
 }
 
-/* Screen-reader-only live region. [FUNCTIONAL] — announceToSR writes
-   here and it must stay off-screen rather than display:none, or
-   assistive tech ignores it. */
+/* [FUNCTIONAL] announceToSR writes here; must be off-screen, not display:none */
 #sr-announcer {
   position: absolute;
   width: 1px;
@@ -1102,61 +1245,371 @@ select:focus {
   border: 0;
 }
 
-/* ── 8f. Mobile ───────────────────────────────────────────────── */
+/* ── 8f. Mobile menu button ───────────────────────────────────── */
 
-/* The hamburger lives outside .app-shell and is only meaningful once the
-   sidebar overlays the content, so it stays out of the desktop layout. */
 .mobile-menu-btn {
-  display: none;
+  display: none; /* hidden on desktop, shown via media query */
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  left: max(8px, env(safe-area-inset-left, 0px));
+  z-index: 40;
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   color: var(--text);
   cursor: pointer;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--stroke);
+/* ────────────────────────────────────────────────────────────────
+   RESPONSIVE BREAKPOINTS
+   ──────────────────────────────────────────────────────────────── */
+
+/* ── sm: 480px+ ───────────────────────────────────────────────── */
+@media (min-width: 480px) {
+  .orb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .top-pill {
+    padding: 6px 12px;
+    font-size: 0.9em;
+  }
+
+  .hero-input-wrapper {
+    width: min(680px, 95%);
+  }
 }
 
-@media (max-width: 720px) {
+/* ── md: 768px+ — tablets, small laptops ──────────────────────── */
+@media (min-width: 768px) {
+  .hero-input-wrapper {
+    width: min(680px, 90%);
+  }
+}
+
+/* ── lg: 1024px+ — desktop: sidebar inline ────────────────────── */
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-collapsed-w: 56px;
+  }
+
+  /* Hide mobile menu button on desktop */
   .mobile-menu-btn {
-    display: block;
-    position: fixed;
-    top: 8px;
-    left: 8px;
-    z-index: 40;
+    display: none !important;
   }
 
+  /* Show sidebar as inline panel, not overlay */
   .sidebar {
-    position: absolute;
-    z-index: 30;
-    height: 100%;
+    position: static;
+    z-index: auto;
+    height: auto;
+    transform: none;
+    box-shadow: none;
   }
 
+  /* On desktop, .collapsed → narrow icon rail */
+  .sidebar.collapsed {
+    flex: 0 0 var(--sidebar-collapsed-w);
+    width: var(--sidebar-collapsed-w);
+    min-width: 0;
+    padding: 8px 0;
+    border-right: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  /* In collapsed state, hide text labels but keep icons */
+  .sidebar.collapsed .btn-new-chat span,
+  .sidebar.collapsed .sidebar-row-label,
+  .sidebar.collapsed .btn-sidebar-io span,
+  .sidebar.collapsed .btn-delete-all-label,
+  .sidebar.collapsed .sidebar-row-rename,
+  .sidebar.collapsed .sidebar-row-delete,
+  .sidebar.collapsed .sidebar-separator {
+    display: none;
+  }
+  .sidebar.collapsed .btn-new-chat,
+  .sidebar.collapsed .btn-delete-all,
+  .sidebar.collapsed .btn-sidebar-io {
+    justify-content: center;
+    padding: 8px;
+    margin: 4px;
+  }
+  .sidebar.collapsed .sidebar-io {
+    flex-direction: column;
+    padding: 4px;
+  }
+  .sidebar.collapsed .sidebar-row {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  /* Show the internal toggle button (panel icon) on desktop */
   .sidebar-toggle {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .sidebar-toggle:hover {
+    color: var(--text);
   }
 
-  .hero-region {
-    padding: var(--gap);
+  /* Backdrop never shown on desktop */
+  .sidebar-backdrop {
+    display: none !important;
+  }
+
+  /* Top bar no longer needs to accommodate hamburger */
+  .top-bar-left {
+    padding-left: 0;
+  }
+}
+
+/* ── xl: 1440px+ — large desktop ──────────────────────────────── */
+@media (min-width: 1440px) {
+  :root {
+    --sidebar-w: 260px;
+  }
+
+  .hero-input-wrapper {
+    width: min(720px, 65%);
+  }
+
+  .story-config {
+    max-width: 720px;
   }
 
   .message {
-    max-width: 100%;
+    max-width: 52em;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   MOBILE / TABLET OVERLAY MODE  ( < 1024px )
+   Sidebar is hidden off-screen by default and slides in as
+   overlay when .open is added (via toggleSidebar()).
+   ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  /* Show hamburger */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
+  /* Sidebar: fixed overlay, off-screen left by default */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    width: var(--sidebar-overlay-w);
+    height: 100dvh;
+    transform: translateX(-100%);
+    box-shadow: none;
+    /* Override desktop collapsed behavior */
+    flex: 0 0 auto;
+  }
+
+  /* .sidebar.open → slide in */
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Collapsed does nothing on mobile overlay */
+  .sidebar.collapsed {
+    flex: 0 0 auto;
+    width: var(--sidebar-overlay-w);
+    min-width: 0;
+    padding: 8px 0;
+    border-right: 1px solid var(--stroke);
+    overflow-y: auto;
+    /* But if also collapsed, keep hidden */
+    transform: translateX(-100%);
+  }
+
+  /* Toggle button inside mobile sidebar */
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .sidebar-toggle:hover {
+    color: var(--text);
+  }
+
+  /* Add left padding to top bar to make room for hamburger */
+  .top-bar {
+    padding-left: 52px;
+  }
+
+  /* Settings panel goes full-width on mobile */
   .top-bar-settings.open {
     width: calc(100vw - 16px);
     right: -8px;
   }
 
+  /* Model dropdown should not overflow right edge */
+  .model-dropdown.open {
+    min-width: 200px;
+    max-width: calc(100vw - 24px);
+  }
+
+  /* Messages full-width */
+  .message {
+    max-width: 100%;
+  }
+
+  /* Hero region less padding */
+  .hero-region {
+    padding: var(--gap);
+    justify-content: flex-start;
+    padding-top: 48px;
+  }
+
+  /* Story config full width */
   .story-config {
+    max-width: 100%;
+  }
+
+  /* Character rows stack on very narrow screens */
+  .story-char-row {
+    flex-direction: column;
+  }
+
+  .settings-mode-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ── Extra-narrow: < 400px ────────────────────────────────────── */
+@media (max-width: 399px) {
+  :root {
+    --sidebar-overlay-w: 100vw;
+    --gap: 8px;
+  }
+
+  .top-bar {
+    gap: 4px;
+    padding: 6px 8px;
+    padding-left: 46px;
+  }
+
+  .top-bar-left,
+  .top-bar-right {
+    gap: 4px;
+  }
+
+  .top-pill {
+    padding: 4px 8px;
+    font-size: 0.8em;
+  }
+
+  .top-pill span {
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .image-model-pill {
+    padding-left: 6px;
+    margin-left: 1px;
+  }
+
+  /* Hide some top-bar text on very narrow screens */
+  .btn-eject {
+    padding: 4px;
+  }
+
+  .hero-input-wrapper {
     width: 100%;
+  }
+
+  .prompt-chips {
+    gap: 6px;
+  }
+
+  .prompt-chip {
+    padding: 6px 10px;
+    font-size: 0.82em;
+  }
+
+  .quick-actions {
+    gap: 6px;
+  }
+
+  .quick-chip {
+    padding: 8px 12px;
+    font-size: 0.82em;
+  }
+
+  .chat-input-box {
+    padding: 8px 10px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PREFERS-REDUCED-MOTION
+   ──────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+
+  .sidebar-backdrop {
+    transition: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PRINT
+   ──────────────────────────────────────────────────────────────── */
+@media print {
+  .sidebar,
+  .mobile-menu-btn,
+  .top-bar,
+  .chat-input-bar,
+  .sidebar-backdrop {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .message {
+    max-width: 100%;
+    border: 1px solid #ccc;
   }
 }

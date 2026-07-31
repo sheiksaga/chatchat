@@ -516,6 +516,22 @@ document.addEventListener("DOMContentLoaded", () => {
   setupHeroInput();
   initTextareaAutoResize();
   initOrbTracking();
+
+  // Clean up sidebar state when resizing across breakpoints
+  window.addEventListener("resize", () => {
+    const sidebar = document.getElementById("sidebar");
+    if (!sidebar) return;
+    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (isDesktop) {
+      // Moving to desktop: remove mobile overlay classes
+      sidebar.classList.remove("open");
+      const backdrop = document.getElementById("sidebar-backdrop");
+      if (backdrop) backdrop.classList.remove("visible");
+    } else {
+      // Moving to mobile/tablet: remove desktop collapsed state
+      sidebar.classList.remove("collapsed");
+    }
+  });
 });
 
 /* ══════════════════════════════════════════════════════════════
