@@ -107,6 +107,34 @@ function stopGeneration() {
 }
 
 /**
+ * Build a human-readable error from a failed response.
+ *
+ * Providers disagree on error shape — OpenAI-style nests it under
+ * `error.message`, others return a bare string — and a raw "HTTP 400" tells
+ * the user nothing actionable, so dig out a message when one exists.
+ * @param {Response} response
+ * @returns {Promise<string>}
+ */
+async function apiErrorDetail(response) {
+    const status = `HTTP ${response.status}`;
+    let body = '';
+    try {
+        body = await response.text();
+    } catch (e) {
+        return status;
+    }
+    if (!body) return status;
+    try {
+        const data = JSON.parse(body);
+        const msg = data?.error?.message || data?.error || data?.message || data?.detail;
+        if (msg) return `${status}: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`;
+    } catch (e) {
+        // Not JSON — fall through and use the raw text.
+    }
+    return `${status}: ${body.slice(0, 200)}`;
+}
+
+/**
  * Enable or disable all send buttons and chat input.
  * @param {boolean} disabled
  */

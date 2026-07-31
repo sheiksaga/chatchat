@@ -204,6 +204,16 @@ async function sendMessage(text) {
     messagesEl.appendChild(userDiv);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
+    // `/image` and `/img` generate a picture instead of a chat reply. The user
+    // turn is already in history above, so the summariser can see the command
+    // in context; images.js filters it back out when building the scene.
+    const imageCmd = parseImageCommand(text);
+    if (imageCmd) {
+        await generateImageMessage(imageCmd.prompt, { raw: imageCmd.raw });
+        document.getElementById('chat-input')?.focus();
+        return;
+    }
+
     await generateResponseForHistory();
 
     document.getElementById('chat-input')?.focus();

@@ -137,3 +137,105 @@ const apiParams = {
     topP: undefined, // set from RP model profiles when available
     topK: undefined
 };
+
+/* ── Safe localStorage access ─────────────────────────────────────
+   Every read/write goes through these two helpers. Raw setItem throws
+   on a full quota and aborts its caller mid-save; raw JSON.parse throws
+   on a corrupt value and can white-screen the app at boot. */
+
+/**
+ * localStorage.setItem wrapped with QuotaExceededError handling.
+ * @param {string} key
+ * @param {string} value
+ */
+function safeSetItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (e) {
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014) {
+            if (typeof showToast === 'function') {
+                showToast('Storage full — could not save. Free up space or delete old chats.', 'error');
+            } else {
+                console.warn('localStorage quota exceeded — could not save "' + key + '"');
+            }
+        } else {
+            console.error('localStorage write failed for "' + key + '":', e);
+        }
+    }
+}
+
+/**
+ * Read and JSON-parse a localStorage value, falling back on corrupt data.
+ * @param {string} key
+ * @param {*} fallback Returned when the key is absent or unparseable
+ * @returns {*}
+ */
+function safeGetJSON(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) {
+        console.warn('Corrupt localStorage value for "' + key + '" — using default:', e);
+        return fallback;
+    }
+}
+
+/* ── Chat index / metadata accessors ──────────────────────────────
+   The index is the ordered list of chat IDs; the meta map holds
+   per-chat settings (name, mode, storyConfig, imageProfile). */
+
+/** @returns {string[]} Ordered list of chat IDs. */
+function getChatIndex() {
+    const idx = safeGetJSON('chat_index', []);
+    return Array.isArray(idx) ? idx : [];
+}
+
+/** @param {string[]} index */
+function setChatIndex(index) {
+    safeSetItem('chat_index', JSON.stringify(index));
+}
+
+/** @returns {Object<string, object>} Per-chat metadata, keyed by chat ID. */
+function getChatMeta() {
+    const meta = safeGetJSON(CHAT_META_KEY, {});
+    return meta && typeof meta === 'object' ? meta : {};
+}
+
+/** @param {Object<string, object>} meta */
+function setChatMeta(meta) {
+    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
+}
+
+/* ── Image generation ─────────────────────────────────────────────
+   Images always go through NanoGPT — LM Studio does not serve them —
+   regardless of which provider is active for chat. */
+
+const IMAGE_PROVIDER_ID = 'nanogpt';
+const DEFAULT_IMAGE_MODEL = 'hidream';
+const DEFAULT_IMAGE_SIZE = '1024x1024';
+
+/** Image endpoint root: 'https://nano-gpt.com/api/v1' -> 'https://nano-gpt.com' */
+function imageApiBase() {
+    const cfg = getProviderConfig(IMAGE_PROVIDER_ID);
+    return cfg.baseUrl.replace(/\/(api\/)?v1\/?$/, '');
+}
+
+/** Headers for image requests — keyed to the image provider, not the active one. */
+function imageApiHeaders(extra) {
+    const h = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+    const cfg = getProviderConfig(IMAGE_PROVIDER_ID);
+    if (cfg.key) h['Authorization'] = 'Bearer ' + cfg.key;
+    return h;
+}
+
+/** Global image-generation defaults; per-chat overrides live in the image profile. */
+const imageParams = {
+    model: localStorage.getItem('image_model') || DEFAULT_IMAGE_MODEL,
+    size: localStorage.getItem('image_size') || DEFAULT_IMAGE_SIZE,
+    resolutions: safeGetJSON('image_resolutions', []),
+    negativePrompt: localStorage.getItem('image_negative_prompt') || '',
+    guidanceScale: localStorage.getItem('image_guidance_scale') || '',
+    steps: localStorage.getItem('image_steps') || '',
+    // Absent means enabled — only the literal string 'false' disables it.
+    showExplicitContent: localStorage.getItem('image_explicit') !== 'false'
+};

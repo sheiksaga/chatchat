@@ -169,7 +169,13 @@ function renderMessages() {
         const msg = chatHistory[i];
         const div = document.createElement('div');
         div.className = `message ${msg.role}`;
-        if (msg.role === 'assistant') {
+        if (msg.image) {
+            // Image messages carry their blob in IndexedDB, not in the
+            // message text — render from the store rather than markdown.
+            div.dataset.msgIndex = i;
+            renderImageMessage(div, msg);
+            addMessageToolbar(div, i);
+        } else if (msg.role === 'assistant') {
             div.innerHTML = renderMarkdown(msg.content || '');
             // Apply syntax highlighting to code blocks
             div.querySelectorAll('pre code').forEach(block => {
@@ -186,6 +192,49 @@ function renderMessages() {
 
     messagesEl.appendChild(fragment);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/**
+ * Render a generated image into an existing message element.
+ *
+ * The blob lives in IndexedDB (too large for localStorage), so the lookup is
+ * async and the element may already be on screen — this fills it in place
+ * rather than returning markup. A missing record is expected rather than
+ * exceptional: `pruneOrphanImages()` can remove a blob whose message survived,
+ * so it degrades to the message's own text instead of showing a broken image.
+ *
+ * @param {HTMLElement} div Message element to populate
+ * @param {{content:string, image:{id:string, prompt:string, model?:string}}} msg
+ * @returns {Promise<void>}
+ */
+async function renderImageMessage(div, msg) {
+    const prompt = msg.image?.prompt || '';
+    div.classList.add('message-image');
+    div.textContent = '';
+
+    let record = null;
+    try {
+        record = await getImage(msg.image.id);
+    } catch (e) {
+        console.warn('Image lookup failed for ' + msg.image?.id + ':', e);
+    }
+
+    if (!record || !record.dataUrl) {
+        const missing = document.createElement('div');
+        missing.className = 'generated-image-missing';
+        missing.textContent = prompt ? `Image unavailable — ${prompt}` : 'Image unavailable';
+        div.appendChild(missing);
+        return;
+    }
+
+    const img = document.createElement('img');
+    img.src = record.dataUrl;
+    // The prompt is the only description available, and it is what a screen
+    // reader user needs to know what was generated.
+    img.alt = prompt || 'Generated image';
+    img.loading = 'lazy';
+    img.className = 'generated-image';
+    div.appendChild(img);
 }
 
 /**

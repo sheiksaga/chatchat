@@ -262,12 +262,9 @@ test('sidebar undo restores a deleted chat', async ({ page }) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════
-// /image command — skipped pending codebase restore
-// The original repo code lacks requestCompletion, apiErrorDetail, and
-// other functions this test depends on. Re-enable after restoring the
-// improved codebase from session 1.
+// /image command
 // ═══════════════════════════════════════════════════════════════════════
-test.skip('/image command generates an image message', async ({ page }) => {
+test('/image command generates an image message', async ({ page }) => {
   await mockBaseEndpoints(page);
   await mockImageGeneration(page);
   await mockImageModels(page);
