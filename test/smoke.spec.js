@@ -87,8 +87,8 @@ test('app loads and shows hero view', async ({ page }) => {
   await mockBaseEndpoints(page);
   await page.goto('/');
   await expect(page.locator('#hero-region')).toBeVisible();
-  await expect(page.locator('#hero-placeholder')).toBeVisible();
-  await expect(page.locator('#hero-input-text')).toBeHidden();
+  await expect(page.locator('#hero-placeholder')).toBeHidden();
+  await expect(page.locator('#hero-input-text')).toBeVisible();
 });
 
 test('clicking hero input reveals textarea and accepts input', async ({ page }) => {
@@ -293,15 +293,17 @@ test('/image command generates an image message', async ({ page }) => {
     }
   });
 
-  await page.goto('/');
-
-  // Set a NanoGPT API key so image generation is available.
-  await page.evaluate(() => {
+  // Activate NanoGPT with a key before the page's own scripts run, so
+  // image generation (which now follows the active provider) is available.
+  await page.addInitScript(() => {
+    localStorage.setItem('active_provider', 'nanogpt');
     localStorage.setItem('provider_cfg_nanogpt', JSON.stringify({
       baseUrl: 'https://nano-gpt.com/api/v1',
       key: 'test-key-123'
     }));
   });
+
+  await page.goto('/');
 
   // First send a regular message to set up chat context
   await page.locator('#hero-input-box').click();
@@ -321,4 +323,26 @@ test('/image command generates an image message', async ({ page }) => {
   await expect(img).toBeVisible();
   // Image should have a data: or blob: src
   await expect(img).toHaveAttribute('src', /data:image/);
+});
+
+test('switching to Cloud reveals provider presets and switching providers works', async ({ page }) => {
+  await mockBaseEndpoints(page);
+  await page.goto('/');
+
+  await page.locator('#config-btn').click();
+  await expect(page.locator('#config-panel')).toHaveClass(/open/);
+
+  await page.locator('#prov-pill-local').click();
+  await expect(page.locator('#prov-pill-local')).toHaveClass(/active/);
+
+  await page.locator('#prov-pill-cloud').click();
+  await expect(page.locator('#prov-pill-cloud')).toHaveClass(/active/);
+  await expect(page.locator('#cloud-provider-row')).toBeVisible();
+  await expect(page.locator('[data-provider-id="nanogpt"]')).toBeVisible();
+  await expect(page.locator('[data-provider-id="openai"]')).toBeVisible();
+  await expect(page.locator('[data-provider-id="openrouter"]')).toBeVisible();
+
+  await page.locator('[data-provider-id="openai"]').click();
+  await expect(page.locator('[data-provider-id="openai"]')).toHaveClass(/active/);
+  await expect(page.locator('#provider-key-row')).toBeVisible();
 });

@@ -20,502 +20,1139 @@
 /* ── 1. Base + tokens ─────────────────────────────────────────── */
 
 :root {
-    --bg: #16181d;
-    --panel: #1d2027;
-    --stroke: #2e323b;
-    --text: #e6e8ec;
-    --muted: #8e97ae;
-    --accent: #6ea8fe;
-    --radius: 8px;
-    --gap: 12px;
+  --bg: #16181d;
+  --panel: #1d2027;
+  --stroke: #2e323b;
+  --text: #e6e8ec;
+  --muted: #8e97ae;
+  --accent: #6ea8fe;
+  --radius: 8px;
+  --gap: 12px;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-html, body {
-    height: 100%;
-    margin: 0;
+html,
+body {
+  height: 100%;
+  margin: 0;
 }
 
 body {
-    background: var(--bg);
-    color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    15px/1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
 }
 
 /* The decorative parallax layers are inert markup now. Kept in the DOM
    (they are aria-hidden) but not painted. */
-.world { display: none; }
+.world {
+  display: none;
+}
 
 /* ── 2. Visibility ────────────────────────────────────────────── */
 
 /* [FUNCTIONAL] Every view toggle in the app routes through .hidden —
    view.js, the dropdowns, the stop/send button swap, story config. */
-.hidden { display: none !important; }
+.hidden {
+  display: none !important;
+}
 
 /* ── 3. App shell ─────────────────────────────────────────────── */
 
 .app-shell {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-pane {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-width: 0; /* let long content shrink instead of forcing overflow */
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0; /* let long content shrink instead of forcing overflow */
 }
 
 .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--gap);
-    padding: 8px var(--gap);
-    border-bottom: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 8px var(--gap);
+  border-bottom: 1px solid var(--stroke);
 }
 
 .top-bar-left,
 .top-bar-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    position: relative;  /* anchor for dropdowns inside */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative; /* anchor for dropdowns inside */
 }
 
 .top-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.9em;
 }
 
 .pill-chevron,
 .pill-icon {
-    display: flex;
-    align-items: center;
-    color: var(--muted);
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+/* Image model selector — separated from text model with a subtle divider */
+.image-model-pill {
+  border-left: 1px solid var(--stroke);
+  padding-left: 10px;
+  margin-left: 2px;
+}
+
+.pill-icon-img {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
 }
 
 /* ── 4. Sidebar ───────────────────────────────────────────────── */
 
 /* Sidebar toggle — hidden on desktop (sidebar always open).
    Shown on mobile inside the overlay drawer. */
-.sidebar-toggle { display: none; }
+.sidebar-toggle {
+  display: none;
+}
 
 .sidebar {
-    display: flex;
-    flex: 0 0 240px;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 8px 0;
-    background: var(--panel);
-    border-right: 1px solid var(--stroke);
-    overflow-y: auto;
+  display: flex;
+  flex: 0 0 240px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: var(--panel);
+  border-right: 1px solid var(--stroke);
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  align-self: stretch;
+}
+
+.btn-new-chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+  align-self: stretch;
+}
+.btn-new-chat:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 #sidebar-chat-list {
-    max-height: 50vh;
-    width: 100%;
-    overflow-y: auto;
+  flex: 1;
+  max-height: 50vh;
+  width: 100%;
+  overflow-y: auto;
 }
 
-.sidebar-spacer { display: none; }
+.sidebar-spacer {
+  display: none;
+}
 
 /* [FUNCTIONAL] Collapsed → zero-width. */
 .sidebar.collapsed {
-    flex: 0 0 0;
-    width: 0;
-    min-width: 0;
-    padding: 0;
-    border: none;
-    overflow: hidden;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
 }
 
 .sidebar-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    cursor: pointer;
-    align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  align-self: stretch;
 }
 
-.sidebar-row:hover { background: rgba(255, 255, 255, 0.05); }
-.sidebar-row.active { background: rgba(255, 255, 255, 0.09); }
+.sidebar-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.sidebar-row.active {
+  background: rgba(255, 255, 255, 0.09);
+}
 
 .sidebar-row-label {
-    flex: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    text-align: left;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
 }
 
 .sidebar-separator {
-    align-self: stretch;
-    height: 1px;
-    margin: 4px 10px;
-    background: var(--stroke);
+  align-self: stretch;
+  height: 1px;
+  margin: 4px 10px;
+  background: var(--stroke);
+}
+
+.sidebar-io {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  align-self: stretch;
+}
+
+.btn-sidebar-io {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+  flex: 1;
+  justify-content: center;
+}
+.btn-sidebar-io:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.btn-delete-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+  align-self: stretch;
+}
+.btn-delete-all:hover {
+  color: #d97474;
+  border-color: rgba(217, 116, 116, 0.3);
+}
+
+.btn-delete-all-icon {
+  display: flex;
+  align-items: center;
+}
+.btn-delete-all-label {
+  flex: 1;
+  text-align: left;
 }
 
 /* ── 5. Hero / landing ────────────────────────────────────────── */
 
 .hero-region {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--gap);
-    padding: var(--gap);
-    padding-right: calc(var(--gap) + 240px);  /* offset sidebar so content is viewport-centred */
-    overflow-y: auto;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap);
+  padding: var(--gap);
+  overflow-y: auto;
 }
 
-.hero-input-wrapper { width: min(680px, 100%); }
+/* Decorative orb on the hero screen */
+.orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at var(--mx, 32%) var(--my, 26%),
+    rgba(180, 200, 255, 0.5) 0%,
+    rgba(110, 168, 254, 0.25) 30%,
+    rgba(80, 120, 200, 0.08) 60%,
+    transparent 72%
+  );
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Mode toggle pills on the hero screen */
+.quick-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.quick-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.quick-chip:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+.quick-chip.active {
+  color: var(--text);
+  background: rgba(110, 168, 254, 0.12);
+  border-color: var(--accent);
+}
+
+.quick-chip-icon {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.hero-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: min(680px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .hero-input {
-    display: flex;
-    flex-direction: column;
-    padding: 10px 12px;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    cursor: text;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  cursor: text;
 }
 
-/* [FUNCTIONAL] The textarea is collapsed until the user clicks the box;
-   init.js adds .active to reveal it. Tests assert both states, so the
-   zero-height/zero-opacity pair must survive any restyle. */
 .hero-input-textarea {
-    width: 100%;
-    max-height: 0;
-    padding: 0;
-    opacity: 0;
-    background: transparent;
-    border: none;
-    color: inherit;
-    font: inherit;
-    resize: none;
-    outline: none;
+  width: 100%;
+  max-height: 140px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  resize: none;
+  outline: none;
 }
 
-.hero-input.active .hero-input-textarea {
-    max-height: 140px;
-    padding: 6px 0;
-    opacity: 1;
-}
-
-.hero-input-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+/* Placeholder overlay is now unused — kept in the DOM for JS compatibility only */
+.hero-input-placeholder {
+  display: none;
 }
 
 .prompt-chips {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .prompt-chip {
-    padding: 6px 10px;
+  padding: 6px 14px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.88em;
+  cursor: pointer;
+}
+.prompt-chip:hover {
+  color: var(--text);
+  border-color: var(--muted);
 }
 
 /* ── 6. Messages ──────────────────────────────────────────────── */
 
 .messages-area {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--gap);
-    padding: var(--gap);
-    overflow-y: auto;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  overflow-y: auto;
 }
 
 .message {
-    position: relative;
-    max-width: 46em;
-    padding: 8px 12px;
-    border-radius: var(--radius);
-    overflow-wrap: anywhere;
+  position: relative;
+  max-width: 46em;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
 }
 
 .message.user {
-    align-self: flex-end;
-    background: var(--panel);
+  align-self: flex-end;
+  background: var(--panel);
 }
 
 .message.assistant {
-    align-self: flex-start;
-    border-left: 2px solid var(--stroke);
+  align-self: flex-start;
+  border-left: 2px solid var(--stroke);
 }
 
-.message p { margin: 0 0 0.5em; }
-.message p:last-child { margin-bottom: 0; }
+.message p {
+  margin: 0 0 0.5em;
+}
+.message p:last-child {
+  margin-bottom: 0;
+}
 
 .loading-indicator,
-.scene-prompt-pending { color: var(--muted); font-style: italic; }
+.scene-prompt-pending {
+  color: var(--muted);
+  font-style: italic;
+}
 
 .msg-toolbar {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .msg-toolbar button {
-    padding: 2px 6px;
-    background: none;
-    border: 1px solid var(--stroke);
-    border-radius: 4px;
-    color: var(--muted);
+  padding: 2px 6px;
+  background: none;
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  color: var(--muted);
 }
 
-.gen-count { color: var(--muted); font-size: 0.85em; }
+.gen-count {
+  color: var(--muted);
+  font-size: 0.85em;
+}
 
 /* Story-mode text roles. Kept because JS adds these classes and the
    distinction is meaningful, not decorative. */
-.story-speech { color: #cfe3ff; }
-.story-action { color: var(--muted); font-style: italic; }
-.story-thought { color: #b9a7e0; }
+.story-speech {
+  color: #cfe3ff;
+}
+.story-action {
+  color: var(--muted);
+  font-style: italic;
+}
+.story-thought {
+  color: #b9a7e0;
+}
 
 /* [FUNCTIONAL] renderImageMessage() targets these three exact names. */
-.message.message-image { padding: 4px; }
+.message.message-image {
+  padding: 4px;
+}
 
 .generated-image {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--radius);
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius);
 }
 
 .generated-image-missing {
-    padding: 12px;
-    border: 1px dashed var(--stroke);
-    border-radius: var(--radius);
-    color: var(--muted);
-    text-align: center;
-    font-size: 0.85em;
+  padding: 12px;
+  border: 1px dashed var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.85em;
 }
 
 /* Code blocks — overflow containment is functional; long lines would
    otherwise force the whole page to scroll sideways. */
 .code-block-wrapper {
-    margin: 0.5em 0;
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    overflow: hidden;
+  margin: 0.5em 0;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .code-block-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 8px;
-    background: var(--panel);
-    font-size: 0.8em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--panel);
+  font-size: 0.8em;
 }
 
 .message pre {
-    margin: 0;
-    padding: 8px;
-    overflow-x: auto;
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
 }
 
-.message code { font-family: ui-monospace, Consolas, monospace; }
+.message code {
+  font-family: ui-monospace, Consolas, monospace;
+}
 
 /* ── 7. Overlays, dropdowns, toasts ───────────────────────────── */
 
 /* [FUNCTIONAL] Dropdowns are now children of .top-bar-left / .top-bar-right
    so position:absolute resolves against those positioned containers. */
 .model-dropdown,
-.top-bar-settings { display: none; }
+.top-bar-settings {
+  display: none;
+}
 
 .model-dropdown.open {
-    display: block;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 20;
-    min-width: 260px;
-    max-height: 70vh;
-    padding: 10px;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    overflow-y: auto;
+  display: block;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 260px;
+  max-height: 70vh;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow-y: auto;
 }
 
 .top-bar-settings.open {
-    display: block;
-    position: absolute;
-    top: 100%;
-    right: 0;
-    z-index: 20;
-    width: 340px;
-    max-height: 80vh;
-    padding: 10px;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    overflow-y: auto;
+  display: block;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  width: 340px;
+  max-height: 80vh;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow-y: auto;
 }
 
 .top-bar-settings.open .settings-label {
-    display: block;
-    margin: 10px 0 4px;
-    color: var(--muted);
-    font-size: 0.85em;
+  display: block;
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 0.85em;
 }
 
-.model-dropdown-item { padding: 6px 8px; cursor: pointer; }
-.model-dropdown-item:hover { background: rgba(255, 255, 255, 0.06); }
+.model-dropdown-item {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.model-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
 
 .story-settings-overlay,
 .confirm-dialog-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .story-settings-modal,
 .confirm-dialog {
-    max-width: min(560px, 92vw);
-    max-height: 85vh;
-    padding: 16px;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    overflow-y: auto;
+  max-width: min(560px, 92vw);
+  max-height: 85vh;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow-y: auto;
 }
 
 .confirm-dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .toast-container {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 60;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .toast {
-    padding: 10px 14px;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
 }
 
-.toast-error { border-color: #a4433f; }
+.toast-error {
+  border-color: #a4433f;
+}
 
 .offline-banner {
-    padding: 6px var(--gap);
-    background: #4a3a1e;
-    text-align: center;
+  padding: 6px var(--gap);
+  background: #4a3a1e;
+  text-align: center;
 }
 
 /* ── 8. Forms and buttons ─────────────────────────────────────── */
 
 button {
-    font: inherit;
-    color: inherit;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    padding: 6px 12px;
-    cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  cursor: pointer;
 }
 
-button:hover { background: rgba(255, 255, 255, 0.08); }
-button:disabled { opacity: 0.5; cursor: default; }
-
-input, textarea, select {
-    font: inherit;
-    color: inherit;
-    background: var(--bg);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius);
-    padding: 6px 8px;
+button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Send / primary action buttons */
+.btn-send {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: #fff;
+  font: inherit;
+  font-size: 0.88em;
+  cursor: pointer;
+}
+.btn-send:hover {
+  background: #5b97e5;
+  border-color: #5b97e5;
+}
+.btn-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.hero-send-btn {
+  margin-left: auto;
+}
+
+/* Stop generation button */
+.btn-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+}
+.btn-stop:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* Eject (unload model) button in top bar */
+.btn-eject {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+}
+.btn-eject:hover {
+  color: var(--text);
+}
+
+/* Mini toggle pills (mode, provider, story style, etc.) */
+.config-mode-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.mini-pill {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82em;
+  cursor: pointer;
+}
+.mini-pill:hover {
+  color: var(--text);
+}
+.mini-pill.active {
+  color: var(--text);
+  background: rgba(110, 168, 254, 0.15);
+  border-color: var(--accent);
+}
+
+/* Compress / add-character secondary buttons */
+.btn-compress,
+.btn-add-char {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.btn-compress:hover,
+.btn-add-char:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* ── 8a. Settings / config panel ──────────────────────────────── */
+
+.settings-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.settings-label {
+  display: block;
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.settings-textarea,
+.story-config-input,
+.story-first-prompt {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9em;
+  resize: vertical;
+}
+.settings-textarea:focus,
+.story-config-input:focus,
+.story-first-prompt:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-textarea {
+  min-height: 80px;
+}
+.story-first-prompt {
+  min-height: 64px;
+}
+
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.85em;
+}
+.settings-slider-row label {
+  min-width: 90px;
+  color: var(--muted);
+}
+.settings-slider-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.settings-slider-val {
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.settings-hint {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.78em;
+}
+
+.settings-shortcuts {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--stroke);
+}
+.settings-shortcuts ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.settings-shortcuts li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+.settings-shortcuts kbd {
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+/* ── 8b. Story config form ────────────────────────────────────── */
+
+.story-config {
+  width: min(680px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.story-section-label {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 0.82em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.story-section-label:first-child {
+  margin-top: 0;
+}
+
+.story-config-input {
+  margin-bottom: 4px;
+}
+
+.story-first-prompt {
+  min-height: 56px;
+  margin-bottom: 8px;
+}
+
+.story-style-pills {
+  margin-bottom: 8px;
+}
+
+.story-default-wrapper {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.story-default-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82em;
+  cursor: pointer;
+}
+.story-default-pill:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.story-char-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.story-char-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-del-char {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-del-char:hover {
+  color: #d97474;
+  border-color: rgba(217, 116, 116, 0.3);
+}
+
+.cloud-provider-row {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.mini-pill-remove {
+  font-size: 1em;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.story-config-input-group {
+  margin-bottom: var(--s-3);
+}
+
+.story-action-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--stroke);
+}
+
+.btn-story-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.btn-story-action:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* ── 8c. Chat input bar ───────────────────────────────────────── */
 
 .chat-input-bar {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-    padding: var(--gap);
-    border-top: 1px solid var(--stroke);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--gap);
+  border-top: 1px solid var(--stroke);
 }
 
-.chat-input-bar textarea {
-    flex: 1;
-    max-height: 160px;
-    resize: none;
+.chat-input-box {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+}
+
+.chat-input-box textarea {
+  width: 100%;
+  max-height: 160px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  resize: none;
+}
+
+.chat-input-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── 8d. Toasts ───────────────────────────────────────────────── */
+
+/* Toast container anchored at top-center (for undo/action toasts) */
+.toast-top-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast-top-container .toast {
+  pointer-events: auto;
+}
+
+/* ── 8e. Screen-reader-only ───────────────────────────────────── */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Screen-reader-only live region. [FUNCTIONAL] — announceToSR writes
    here and it must stay off-screen rather than display:none, or
    assistive tech ignores it. */
 #sr-announcer {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
+
+/* ── 8f. Mobile ───────────────────────────────────────────────── */
 
 /* The hamburger lives outside .app-shell and is only meaningful once the
    sidebar overlays the content, so it stays out of the desktop layout. */
-.mobile-menu-btn { display: none; }
+.mobile-menu-btn {
+  display: none;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
 
 .sidebar-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--stroke);
 }
 
 @media (max-width: 720px) {
-    .mobile-menu-btn {
-        display: block;
-        position: fixed;
-        top: 8px;
-        left: 8px;
-        z-index: 40;
-    }
+  .mobile-menu-btn {
+    display: block;
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 40;
+  }
 
-    .sidebar {
-        position: absolute;
-        z-index: 30;
-        height: 100%;
-    }
+  .sidebar {
+    position: absolute;
+    z-index: 30;
+    height: 100%;
+  }
 
-    .sidebar-toggle { display: flex; }
+  .sidebar-toggle {
+    display: flex;
+  }
 
-    .hero-region { padding: var(--gap); }
+  .hero-region {
+    padding: var(--gap);
+  }
 
-    .message { max-width: 100%; }
+  .message {
+    max-width: 100%;
+  }
+
+  .top-bar-settings.open {
+    width: calc(100vw - 16px);
+    right: -8px;
+  }
+
+  .story-config {
+    width: 100%;
+  }
 }
