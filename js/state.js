@@ -313,9 +313,19 @@ function setChatMeta(meta) {
 
 const DEFAULT_IMAGE_MODEL = "hidream";
 const DEFAULT_IMAGE_SIZE = "1024x1024";
+const IMAGE_SIZE_MIN = 512;
+const IMAGE_SIZE_MAX = 1024;
+
+/** Clamp a "WxH" size string's side to the slider's supported range. */
+function clampImageSize(size) {
+  const side = parseInt(size, 10);
+  if (!side) return DEFAULT_IMAGE_SIZE;
+  const clamped = Math.min(IMAGE_SIZE_MAX, Math.max(IMAGE_SIZE_MIN, side));
+  return `${clamped}x${clamped}`;
+}
 
 /** Global image-generation defaults; per-chat overrides live in the image profile. */
 const imageParams = {
   model: localStorage.getItem("image_model") || DEFAULT_IMAGE_MODEL,
-  size: localStorage.getItem("image_size") || DEFAULT_IMAGE_SIZE,
+  size: clampImageSize(localStorage.getItem("image_size") || DEFAULT_IMAGE_SIZE),
 };

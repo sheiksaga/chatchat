@@ -546,7 +546,7 @@ body {
 
 .message.assistant {
   align-self: flex-start;
-  border-left: 2px solid var(--stroke);
+  border: 1px solid var(--stroke);
 }
 
 .message p {
