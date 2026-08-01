@@ -117,6 +117,7 @@ function switchChat(chatId) {
   const meta = safeGetJSON(CHAT_META_KEY, {});
   storyConfig = meta[chatId]?.storyConfig || {
     style: "cyoa",
+    narration: "first",
     scene: "",
     characters: [],
     tags: "",
@@ -209,6 +210,7 @@ function deleteChat(chatId) {
       const meta2 = safeGetJSON(CHAT_META_KEY, {});
       storyConfig = meta2[currentChatId]?.storyConfig || {
         style: "cyoa",
+        narration: "first",
         scene: "",
         characters: [],
         tags: "",
@@ -220,6 +222,7 @@ function deleteChat(chatId) {
       currentChatId = null;
       storyConfig = {
         style: "cyoa",
+        narration: "first",
         scene: "",
         characters: [],
         tags: "",

@@ -61,6 +61,42 @@ function initSliders() {
     });
   }
 
+  const stepsSlider = document.getElementById(DOM.imageSteps);
+  const stepsVal = document.getElementById("image-steps-val");
+  if (stepsSlider) {
+    stepsSlider.value = imageParams.steps;
+    if (stepsVal) stepsVal.textContent = String(imageParams.steps);
+    stepsSlider.addEventListener("input", () => {
+      const val = parseInt(stepsSlider.value, 10);
+      imageParams.steps = val;
+      safeSetItem("image_steps", String(val));
+      if (stepsVal) stepsVal.textContent = String(val);
+    });
+  }
+
+  const loraPathInput = document.getElementById(DOM.imageLoraPath);
+  if (loraPathInput) {
+    loraPathInput.value = imageParams.loraPath;
+    loraPathInput.addEventListener("change", () => {
+      const val = loraPathInput.value.trim();
+      imageParams.loraPath = val;
+      safeSetItem("image_lora_path", val);
+    });
+  }
+
+  const loraScaleSlider = document.getElementById(DOM.imageLoraScale);
+  const loraScaleVal = document.getElementById("image-lora-scale-val");
+  if (loraScaleSlider) {
+    loraScaleSlider.value = imageParams.loraScale;
+    if (loraScaleVal) loraScaleVal.textContent = imageParams.loraScale.toFixed(2);
+    loraScaleSlider.addEventListener("input", () => {
+      const val = parseFloat(loraScaleSlider.value);
+      imageParams.loraScale = val;
+      safeSetItem("image_lora_scale", String(val));
+      if (loraScaleVal) loraScaleVal.textContent = val.toFixed(2);
+    });
+  }
+
   initProviderUI();
 }
 

@@ -63,6 +63,8 @@ const DOM = {
   imageExplicit: "image-explicit",
   imageStyle: "image-style",
   imageResetCast: "image-reset-cast",
+  imageLoraPath: "image-lora-path",
+  imageLoraScale: "image-lora-scale",
 
   /* System prompt + story config */
   systemPrompt: "system-prompt",

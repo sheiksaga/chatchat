@@ -85,6 +85,7 @@ function removeCharacterRow(index) {
 
 function useDefaultStory() {
   var style = currentStyle();
+  var narration = storyConfig.narration === "third" ? "third" : "first";
   var firstPrompts = {
     cyoa: "Begin the story. Describe the opening scene vividly and present 2-3 clear choices for what happens next.",
     roleplay:
@@ -93,6 +94,7 @@ function useDefaultStory() {
   };
   storyConfig = {
     style: style,
+    narration: narration,
     scene:
       "A misty forest at twilight. Ancient trees loom overhead, and a narrow path winds deeper into the unknown.",
     characters: [
@@ -187,8 +189,10 @@ async function generateStory() {
         data.choices[0].message.content,
     );
     if (!parsed) throw new Error("could not parse story JSON");
+    var narration = storyConfig.narration === "third" ? "third" : "first";
     storyConfig = {
       style: styleId,
+      narration: narration,
       scene:
         typeof parsed.setting === "string"
           ? parsed.setting
@@ -231,6 +235,18 @@ function setStoryStyle(id) {
   if (typeof refreshHeroSendButton === "function") refreshHeroSendButton();
 }
 
+/**
+ * Set the roleplay narration voice, persist it, and refresh the pill UI.
+ * @param {'first'|'third'} mode
+ */
+function setStoryNarration(mode) {
+  if (mode !== "first" && mode !== "third") return;
+  storyConfig.narration = mode;
+  saveStoryConfig();
+  syncStoryStyleUI();
+  if (typeof refreshHeroSendButton === "function") refreshHeroSendButton();
+}
+
 /** Crossfade an element's text: fade out, swap textContent, fade back in. */
 function fadeSwapText(el, newText) {
   if (!el) return;
@@ -257,6 +273,20 @@ function syncStoryStyleUI() {
     if (pill) {
       pill.classList.toggle("active", id === active);
       pill.setAttribute("aria-pressed", String(id === active));
+    }
+  });
+  // Narration voice pills only apply to (and only show for) roleplay style.
+  var narrationGroup = document.getElementById("story-narration-pills");
+  if (narrationGroup) {
+    narrationGroup.classList.toggle("hidden", active !== "roleplay");
+  }
+  var activeNarration =
+    storyConfig && storyConfig.narration === "third" ? "third" : "first";
+  ["first", "third"].forEach(function (mode) {
+    var pill = document.getElementById("narration-pill-" + mode);
+    if (pill) {
+      pill.classList.toggle("active", mode === activeNarration);
+      pill.setAttribute("aria-pressed", String(mode === activeNarration));
     }
   });
   // Update textarea placeholder for story mode on hero load.

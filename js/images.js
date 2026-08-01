@@ -81,6 +81,18 @@ async function requestImage(prompt, signal) {
     size: imageParams.size,
     n: 1,
   };
+  // LoRA is a local-server extension (mflux/MLX Omni) — only meaningful, and
+  // only sent, when talking to a local provider. The server caches its
+  // generator per model id, so this only needs to actually take effect once
+  // per server run, but sending it every time costs nothing and needs no
+  // manual priming step.
+  if (cfg.isLocal && imageParams.loraPath) {
+    body["lora-paths"] = [imageParams.loraPath];
+    body["lora-scales"] = [imageParams.loraScale];
+  }
+  if (cfg.isLocal && imageParams.steps) {
+    body["steps"] = imageParams.steps;
+  }
   let response;
   try {
     response = await fetch(`${cfg.baseUrl}/images/generations`, {
@@ -176,6 +188,9 @@ function extractImageUrl(data) {
  */
 async function generateImageMessage(prompt, opts) {
   opts = opts || {};
+  // `prompt` gets rewritten in place below (scene summariser, image profile) —
+  // keep the original around so a failed generation can be retried from scratch.
+  const originalPrompt = prompt;
   const messagesEl = document.getElementById("messages");
 
   const loadingDiv = document.createElement("div");
@@ -268,6 +283,7 @@ async function generateImageMessage(prompt, opts) {
     loadingDiv.classList.remove("loading-indicator");
     if (err.localServerUnreachable) notifyLocalServerUnreachable();
     else showToast(`Image generation failed: ${err.message}`, "error");
+    addRetryButton(loadingDiv, () => generateImageMessage(originalPrompt, opts));
     return -1;
   } finally {
     disableInputs(false);

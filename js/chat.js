@@ -56,9 +56,13 @@ const STORY_STYLES = {
     label: "Roleplay",
     hero: "What do you do or say?",
     buildPrompt: function (cfg) {
+      var narrationLine =
+        cfg.narration === "third"
+          ? "The FIRST character listed below is your lead character \u2014 narrate them in third person, using their name and pronouns rather than \"I\", as a novel would. Voice every other listed character as an NPC when the scene calls for it."
+          : "The FIRST character listed below is your lead character \u2014 speak and act as them in first person, in character. Voice every other listed character as an NPC when the scene calls for it.";
       var parts = [
         "You are a masterful roleplay partner running in story mode.",
-        "The FIRST character listed below is your lead character \u2014 speak and act as them in first person, in character. Voice every other listed character as an NPC when the scene calls for it.",
+        narrationLine,
         "Set the scene, then keep track of who is present, the location, and the mood as the story unfolds.",
         'The user may either DIRECT the scene from outside (e.g. "move toward the cockpit", "we are now in the schoolyard") OR speak and act in character. Interpret which they mean and respond accordingly.',
         "NEVER narrate the user's own words, actions, thoughts, or feelings for them.",
@@ -169,6 +173,7 @@ async function streamAssistantResponse() {
     loadingDiv.textContent = `Error: ${err.message}`;
     loadingDiv.classList.remove("loading-indicator");
     showToast(`Generation failed: ${err.message}`, "error");
+    addRetryButton(loadingDiv, () => streamAssistantResponse());
     return -1;
   } finally {
     disableInputs(false);

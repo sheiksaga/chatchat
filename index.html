@@ -542,6 +542,45 @@
                 >
               </div>
 
+              <div class="settings-slider-row">
+                <label for="image-steps">Steps (local providers only)</label>
+                <input
+                  type="range"
+                  id="image-steps"
+                  min="1"
+                  max="8"
+                  step="1"
+                  value="4"
+                />
+                <span class="settings-slider-val" id="image-steps-val">4</span>
+              </div>
+
+              <label class="settings-label" for="image-lora-path"
+                >LoRA path (local providers only)</label
+              >
+              <input
+                type="text"
+                class="story-config-input"
+                id="image-lora-path"
+                placeholder="/path/to/lora.safetensors"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="settings-slider-row">
+                <label for="image-lora-scale">LoRA scale</label>
+                <input
+                  type="range"
+                  id="image-lora-scale"
+                  min="0"
+                  max="1.5"
+                  step="0.05"
+                  value="1"
+                />
+                <span class="settings-slider-val" id="image-lora-scale-val"
+                  >1.00</span
+                >
+              </div>
+
               <label class="settings-label" for="system-prompt"
                 >System Prompt / Persona</label
               >
@@ -768,6 +807,36 @@
                 Game Master
               </button>
             </div>
+
+            <!-- Narration voice (roleplay style only) -->
+            <div
+              class="config-mode-pills story-narration-pills hidden"
+              id="story-narration-pills"
+              role="group"
+              aria-label="Narration voice"
+            >
+              <button
+                type="button"
+                class="mini-pill active"
+                id="narration-pill-first"
+                onclick="setStoryNarration('first')"
+                aria-pressed="true"
+                title="Your lead character speaks and acts as “I”."
+              >
+                First Person
+              </button>
+              <button
+                type="button"
+                class="mini-pill"
+                id="narration-pill-third"
+                onclick="setStoryNarration('third')"
+                aria-pressed="false"
+                title="Your lead character is narrated by name/pronoun, like a novel."
+              >
+                Third Person
+              </button>
+            </div>
+
             <!-- Use Default pill -->
             <div class="story-default-wrapper" id="story-default-wrapper">
               <button

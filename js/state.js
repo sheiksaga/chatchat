@@ -255,6 +255,14 @@ function migrateData() {
       changed = true;
     }
   }
+  // Backfill narration voice on stored configs that predate the narration field.
+  for (const chatId in meta) {
+    const sc = meta[chatId]?.storyConfig;
+    if (sc && typeof sc === "object" && !sc.narration) {
+      sc.narration = "first";
+      changed = true;
+    }
+  }
   if (changed) {
     safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
   }
@@ -281,9 +289,10 @@ const RP_MODELS = {
 
 /** @type {'chat'|'story'|'image'} */
 let currentMode = "chat";
-/** @type {{style:('cyoa'|'roleplay'|'gm'), scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
+/** @type {{style:('cyoa'|'roleplay'|'gm'), narration:('first'|'third'), scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
 let storyConfig = {
   style: "cyoa",
+  narration: "first",
   scene: "",
   characters: [],
   tags: "",
@@ -396,4 +405,12 @@ function clampImageSize(size) {
 const imageParams = {
   model: localStorage.getItem("image_model") || DEFAULT_IMAGE_MODEL,
   size: clampImageSize(localStorage.getItem("image_size") || DEFAULT_IMAGE_SIZE),
+  // Local-server LoRA (e.g. MLX Omni / mflux) — sent as extra body fields on
+  // every image request so the generator picks it up without any manual
+  // priming step. Ignored by providers that don't understand the field.
+  loraPath: localStorage.getItem("image_lora_path") || "",
+  loraScale: parseFloat(localStorage.getItem("image_lora_scale")) || 1.0,
+  // Diffusion steps — another mflux-specific extra field. mflux defaults to
+  // 4, which is already tuned for schnell; lower trades quality for speed.
+  steps: parseInt(localStorage.getItem("image_steps"), 10) || 4,
 };
