@@ -322,6 +322,102 @@ const LOCAL_IMAGE_MODEL_HINT = {
     "download it, then it should show up here.",
 };
 
+/* ── Remembered local image models ────────────────────────────────
+   MLX Omni's /models endpoint only recognizes chat-model configs, so it
+   never lists FLUX/diffusers-style checkpoints — there's no way to
+   auto-discover what's in the local HF cache. As a substitute, every model
+   id the user types for a local provider is remembered here so it can be
+   picked again instead of retyped. */
+
+const IMAGE_MODEL_HISTORY_KEY = "image_model_history";
+const IMAGE_MODEL_HISTORY_MAX = 10;
+
+/** @returns {string[]} Remembered local image model ids, most recent first. */
+function getImageModelHistory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(IMAGE_MODEL_HISTORY_KEY));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Remember a model id, most-recent-first, deduped, capped. */
+function addToImageModelHistory(modelId) {
+  const history = getImageModelHistory().filter((id) => id !== modelId);
+  history.unshift(modelId);
+  safeSetItem(
+    IMAGE_MODEL_HISTORY_KEY,
+    JSON.stringify(history.slice(0, IMAGE_MODEL_HISTORY_MAX)),
+  );
+}
+
+/** Forget a remembered model id and re-render the dropdown in place. */
+function removeFromImageModelHistory(modelId, dropdown, cfg) {
+  const history = getImageModelHistory().filter((id) => id !== modelId);
+  safeSetItem(IMAGE_MODEL_HISTORY_KEY, JSON.stringify(history));
+  dropdown.innerHTML = "";
+  renderImageModelHistoryList(dropdown, cfg);
+}
+
+/**
+ * Render remembered model ids as selectable rows, each with a remove (×)
+ * button. Appends to whatever's already in `dropdown` rather than clearing
+ * it, so a caller can show an error/status line above the list.
+ * @param {object} [cfg] The resolved image provider, if known — gates the
+ *   MLX-specific "browse mlx-community" hint to the built-in preset only.
+ */
+function renderImageModelHistoryList(dropdown, cfg) {
+  const history = getImageModelHistory();
+
+  if (history.length === 0) {
+    dropdown.insertAdjacentHTML(
+      "beforeend",
+      `<div class="model-dropdown-empty">
+        No models loaded yet — type a model id below once, and it'll be
+        remembered here for next time.
+        ${cfg && cfg.id === "local_image" ? `<div class="settings-hint">${LOCAL_IMAGE_MODEL_HINT.hint}</div>
+        <a href="${LOCAL_IMAGE_MODEL_HINT.linkHref}" target="_blank" rel="noopener">${LOCAL_IMAGE_MODEL_HINT.linkLabel}</a>` : ""}
+      </div>`,
+    );
+    appendManualEntryLink(dropdown);
+    return;
+  }
+
+  const listEl = document.createElement("div");
+  listEl.className = "model-dropdown-list";
+  history.forEach((id) => {
+    const item = document.createElement("div");
+    item.className = "model-dropdown-item history-item";
+    item.setAttribute("role", "option");
+    if (id === imageParams.model) {
+      item.classList.add("active");
+      item.setAttribute("aria-selected", "true");
+    }
+
+    const label = document.createElement("span");
+    label.textContent = id;
+    label.onclick = () => selectImageModel(id);
+    item.appendChild(label);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "history-item-remove";
+    removeBtn.setAttribute("aria-label", `Forget ${id}`);
+    removeBtn.title = "Forget this model";
+    removeBtn.textContent = "×";
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      removeFromImageModelHistory(id, dropdown, cfg);
+    };
+    item.appendChild(removeBtn);
+
+    listEl.appendChild(item);
+  });
+  dropdown.appendChild(listEl);
+  appendManualEntryLink(dropdown);
+}
+
 /**
  * Open the image model selector. For local providers this fetches and shows
  * the models actually available on that server; for everything else it's a
@@ -365,12 +461,9 @@ async function openImageModelSelector() {
     dropdown.innerHTML = "";
 
     if (models.length === 0) {
-      dropdown.innerHTML = `<div class="model-dropdown-empty">
-        No models loaded on ${cfg.label} yet.
-        ${cfg.id === "local_image" ? `<div class="settings-hint">${LOCAL_IMAGE_MODEL_HINT.hint}</div>
-        <a href="${LOCAL_IMAGE_MODEL_HINT.linkHref}" target="_blank" rel="noopener">${LOCAL_IMAGE_MODEL_HINT.linkLabel}</a>` : ""}
-      </div>`;
-      appendManualEntryLink(dropdown);
+      // The server's own list is empty (MLX Omni never lists FLUX-family
+      // checkpoints) — fall back to what's been typed here before.
+      renderImageModelHistoryList(dropdown, cfg);
       return;
     }
 
@@ -379,7 +472,7 @@ async function openImageModelSelector() {
   } catch (err) {
     if (cfg.id === "local_image") notifyLocalServerUnreachable();
     dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Can't reach ${cfg.label}: ${err.message}</div>`;
-    appendManualEntryLink(dropdown);
+    renderImageModelHistoryList(dropdown, cfg);
   }
 }
 
@@ -424,6 +517,8 @@ function renderImageModelTextInput(dropdown) {
 function selectImageModel(modelId) {
   imageParams.model = modelId;
   safeSetItem("image_model", modelId);
+  const { cfg } = resolveImageProvider();
+  if (cfg && cfg.isLocal) addToImageModelHistory(modelId);
   const nameEl = document.getElementById("current-image-model-name");
   if (nameEl) nameEl.textContent = modelId;
   document.getElementById("image-model-dropdown")?.classList.remove("open");
