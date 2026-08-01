@@ -2,6 +2,9 @@
    help.js — Setup guide modal (local models, LAN, cloud providers)
    ══════════════════════════════════════════════════════════════ */
 
+/** The command that starts the local MLX Omni image server, CORS-enabled for the browser. */
+const MLX_OMNI_START_COMMAND = 'mlx-omni-server --port 10240 --cors-allow-origins="*"';
+
 /** Static, trusted HTML — never interpolates user data, so plain innerHTML is safe here. */
 const HELP_CONTENT_HTML = `
   <div class="help-section">
@@ -30,7 +33,7 @@ const HELP_CONTENT_HTML = `
     <ol>
       <li>Install: <code>pip install mlx-omni-server</code></li>
       <li>Run it with CORS enabled so the browser can reach it:<br>
-        <code>mlx-omni-server --port 10240 --cors-allow-origins="*"</code>
+        <code>${MLX_OMNI_START_COMMAND}</code>
       </li>
       <li>In chatchat, pick <strong>Local image (MLX Omni)</strong> under Image Provider — it points at <code>http://localhost:10240/v1</code> by default.</li>
       <li>Set the image model to <code>dhairyashil/FLUX.1-schnell-mflux-4bit</code> (or another MLX FLUX checkpoint) via the image-model pill in the top bar.</li>

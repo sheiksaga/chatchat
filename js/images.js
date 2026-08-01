@@ -81,14 +81,45 @@ async function requestImage(prompt, signal) {
     size: imageParams.size,
     n: 1,
   };
-  const response = await fetch(`${cfg.baseUrl}/images/generations`, {
-    method: "POST",
-    headers: imageProviderHeaders(cfg),
-    body: JSON.stringify(body),
-    signal: signal,
-  });
+  let response;
+  try {
+    response = await fetch(`${cfg.baseUrl}/images/generations`, {
+      method: "POST",
+      headers: imageProviderHeaders(cfg),
+      body: JSON.stringify(body),
+      signal: signal,
+    });
+  } catch (networkErr) {
+    // A rejected fetch (vs. a non-ok response, handled below) means the server
+    // wasn't reachable at all — for the one local provider with a known start
+    // command, surface that instead of a raw "Failed to fetch".
+    if (networkErr.name !== "AbortError" && cfg.id === "local_image") {
+      networkErr.localServerUnreachable = true;
+    }
+    throw networkErr;
+  }
   if (!response.ok) throw new Error(await apiErrorDetail(response));
   return extractImageUrl(await response.json());
+}
+
+/** Show a "server not running" toast with a one-click copy of the start command. */
+function notifyLocalServerUnreachable() {
+  showToast(
+    "MLX Omni isn't running on localhost:10240 — copy the start command, run it in Terminal, then try again.",
+    "error",
+    {
+      actionLabel: "Copy command",
+      duration: 10000,
+      onAction: async () => {
+        try {
+          await navigator.clipboard.writeText(MLX_OMNI_START_COMMAND);
+          showToast("Command copied", "success");
+        } catch {
+          showToast(MLX_OMNI_START_COMMAND, "error", { duration: 10000 });
+        }
+      },
+    },
+  );
 }
 
 /**
@@ -235,7 +266,8 @@ async function generateImageMessage(prompt, opts) {
     console.error("Image generation error:", err);
     loadingDiv.textContent = `Error: ${err.message}`;
     loadingDiv.classList.remove("loading-indicator");
-    showToast(`Image generation failed: ${err.message}`, "error");
+    if (err.localServerUnreachable) notifyLocalServerUnreachable();
+    else showToast(`Image generation failed: ${err.message}`, "error");
     return -1;
   } finally {
     disableInputs(false);
@@ -255,17 +287,31 @@ async function generateImageMessage(prompt, opts) {
 }
 
 /* ── Image model selector ─────────────────────────────────────────
-   No provider-side discovery: with only the OpenAI-compatible shape
+   Cloud providers get no discovery: with only the OpenAI-compatible shape
    supported, there's no clean generic way to shortlist a provider's image
    models from its plain /models list (OpenAI has ~3 known image model ids;
-   NanoGPT alone has 200+, with no capability flag on the general list).
-   The user just types the model id they want. */
+   NanoGPT alone has 200+, with no capability flag on the general list) — the
+   user just types the model id they want.
+
+   Local providers are different: /models genuinely reflects what's loaded
+   on the machine, so it's fetched and shown as a real list, same as the
+   text model selector. */
+
+/** Hint shown when a local image provider reports zero models. */
+const LOCAL_IMAGE_MODEL_HINT = {
+  linkLabel: "Browse MLX models on Hugging Face",
+  linkHref: "https://huggingface.co/mlx-community",
+  hint:
+    'Search for a FLUX checkpoint, e.g. "mlx-community/FLUX.1-schnell-4bit", ' +
+    "download it, then it should show up here.",
+};
 
 /**
- * Open the image model id editor — a single text field pre-filled with the
- * current model, committed on Enter or blur.
+ * Open the image model selector. For local providers this fetches and shows
+ * the models actually available on that server; for everything else it's a
+ * free-text field, since there's no way to shortlist a cloud catalog.
  */
-function openImageModelSelector() {
+async function openImageModelSelector() {
   const dropdown = document.getElementById("image-model-dropdown");
   if (!dropdown) return;
   if (dropdown.classList.contains("open")) {
@@ -280,6 +326,60 @@ function openImageModelSelector() {
   dropdown.innerHTML = "";
   dropdown.classList.add("open");
 
+  const { cfg } = resolveImageProvider();
+  if (!cfg || !cfg.isLocal) {
+    renderImageModelTextInput(dropdown);
+    return;
+  }
+
+  dropdown.setAttribute("role", "listbox");
+  dropdown.setAttribute("aria-label", "Available image models");
+  dropdown.innerHTML =
+    '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">Loading models...</div>';
+
+  try {
+    const response = await fetch(`${cfg.baseUrl}/models`, {
+      headers: imageProviderHeaders(cfg),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const models = (data.data || []).map((m) => m.id);
+
+    dropdown.innerHTML = "";
+
+    if (models.length === 0) {
+      dropdown.innerHTML = `<div class="model-dropdown-empty">
+        No models loaded on ${cfg.label} yet.
+        ${cfg.id === "local_image" ? `<div class="settings-hint">${LOCAL_IMAGE_MODEL_HINT.hint}</div>
+        <a href="${LOCAL_IMAGE_MODEL_HINT.linkHref}" target="_blank" rel="noopener">${LOCAL_IMAGE_MODEL_HINT.linkLabel}</a>` : ""}
+      </div>`;
+      appendManualEntryLink(dropdown);
+      return;
+    }
+
+    renderModelDropdownList(dropdown, models, imageParams.model, selectImageModel);
+    appendManualEntryLink(dropdown);
+  } catch (err) {
+    if (cfg.id === "local_image") notifyLocalServerUnreachable();
+    dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Can't reach ${cfg.label}: ${err.message}</div>`;
+    appendManualEntryLink(dropdown);
+  }
+}
+
+/** Append a small "type a custom id instead" fallback below a fetched local model list. */
+function appendManualEntryLink(dropdown) {
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "model-dropdown-manual-link";
+  link.textContent = "Type a custom model id instead";
+  link.onclick = () => renderImageModelTextInput(dropdown);
+  dropdown.appendChild(link);
+}
+
+/** Render the free-text image model id field — used for cloud providers, and as a manual fallback for local ones. */
+function renderImageModelTextInput(dropdown) {
+  dropdown.innerHTML = "";
   const input = document.createElement("input");
   input.type = "text";
   input.className = "story-config-input image-model-input";
@@ -330,6 +430,8 @@ function initImageModelName() {
   const el = document.getElementById("current-image-model-name");
   if (el && imageParams.model) el.textContent = imageParams.model;
 }
+
+attachModelDropdownKeyNav("image-model-dropdown");
 
 // Close image model dropdown when clicking outside
 document.addEventListener("click", (e) => {

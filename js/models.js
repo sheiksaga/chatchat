@@ -27,6 +27,90 @@ function resetIdleTimer() {
 }
 
 /**
+ * Render a filterable, keyboard-navigable list of model ids into `dropdown`
+ * (which must already be empty). Shared by the text and image model
+ * selectors so both stay consistent.
+ * @param {HTMLElement} dropdown
+ * @param {string[]} ids
+ * @param {string} selectedId
+ * @param {(id:string) => void} onSelect
+ */
+function renderModelDropdownList(dropdown, ids, selectedId, onSelect) {
+  // Type-to-filter box (sticky at top of the dropdown).
+  const filter = document.createElement("input");
+  filter.type = "text";
+  filter.className = "model-filter-input";
+  filter.placeholder = "Filter models…";
+  filter.setAttribute("aria-label", "Filter models");
+  dropdown.appendChild(filter);
+
+  const listEl = document.createElement("div");
+  listEl.className = "model-dropdown-list";
+  dropdown.appendChild(listEl);
+
+  function renderList(query) {
+    const q = (query || "").toLowerCase();
+    listEl.innerHTML = "";
+    const filtered = q ? ids.filter((id) => id.toLowerCase().includes(q)) : ids;
+    if (!filtered.length) {
+      listEl.innerHTML =
+        '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">No matches</div>';
+      return;
+    }
+    filtered.forEach((id, i) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "model-dropdown-item";
+      item.setAttribute("role", "option");
+      item.textContent = id;
+      if (id === selectedId) {
+        item.classList.add("active");
+        item.setAttribute("aria-selected", "true");
+      }
+      item.onclick = () => onSelect(id);
+      // Cap the stagger so long cloud lists don't animate for seconds.
+      if (i < 12)
+        item.style.animation = `dropdownItemIn 200ms ${i * 40}ms both cubic-bezier(0.34, 1.56, 0.64, 1)`;
+      listEl.appendChild(item);
+    });
+  }
+
+  renderList("");
+  filter.addEventListener("input", () => renderList(filter.value));
+  filter.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      listEl.querySelector("button.model-dropdown-item")?.focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      listEl.querySelector("button.model-dropdown-item")?.click();
+    }
+  });
+  filter.focus();
+}
+
+/**
+ * Arrow-key navigation within a model dropdown (Enter/Space fire the native
+ * button click) — shared by the text and image model selectors.
+ * @param {string} dropdownId
+ */
+function attachModelDropdownKeyNav(dropdownId) {
+  document.getElementById(dropdownId)?.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = Array.from(
+      document.querySelectorAll(`#${dropdownId} .model-dropdown-item`),
+    ).filter((el) => el.tagName === "BUTTON");
+    if (!items.length) return;
+    e.preventDefault();
+    const current = document.activeElement;
+    let idx = items.indexOf(current);
+    if (e.key === "ArrowDown") idx = (idx + 1) % items.length;
+    else idx = (idx - 1 + items.length) % items.length;
+    items[idx].focus();
+  });
+}
+
+/**
  * Open model selector dropdown, fetch model list from LM Studio.
  */
 async function openModelSelector() {
@@ -56,85 +140,34 @@ async function openModelSelector() {
     dropdown.innerHTML = "";
 
     if (models.length === 0) {
-      const empty = currentProvider().isLocal
-        ? "No models loaded in LM Studio"
-        : "No models returned by provider";
-      dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">${empty}</div>`;
+      if (currentProvider().isLocal) {
+        dropdown.innerHTML = `<div class="model-dropdown-empty">
+          No models loaded in LM Studio yet.
+          <div class="settings-hint">
+            Search Hugging Face for a GGUF chat model (e.g. "Llama-3.1-8B-Instruct-GGUF")
+            and download it from LM Studio's Discover tab.
+          </div>
+          <a href="https://huggingface.co/models?library=gguf&sort=trending" target="_blank" rel="noopener">Browse GGUF models on Hugging Face</a>
+        </div>`;
+      } else {
+        dropdown.innerHTML =
+          '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">No models returned by provider</div>';
+      }
       return;
     }
 
-    // Type-to-filter box (sticky at top of the dropdown).
-    const filter = document.createElement("input");
-    filter.type = "text";
-    filter.className = "model-filter-input";
-    filter.placeholder = "Filter models…";
-    filter.setAttribute("aria-label", "Filter models");
-    dropdown.appendChild(filter);
-
-    const listEl = document.createElement("div");
-    listEl.className = "model-dropdown-list";
-    dropdown.appendChild(listEl);
-
-    function renderList(query) {
-      const q = (query || "").toLowerCase();
-      listEl.innerHTML = "";
-      const filtered = q
-        ? models.filter((m) => m.id.toLowerCase().includes(q))
-        : models;
-      if (!filtered.length) {
-        listEl.innerHTML =
-          '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">No matches</div>';
-        return;
-      }
-      filtered.forEach((model, i) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "model-dropdown-item";
-        item.setAttribute("role", "option");
-        item.textContent = model.id;
-        if (model.id === selectedModel) {
-          item.classList.add("active");
-          item.setAttribute("aria-selected", "true");
-        }
-        item.onclick = () => selectModel(model.id);
-        // Cap the stagger so long cloud lists don't animate for seconds.
-        if (i < 12)
-          item.style.animation = `dropdownItemIn 200ms ${i * 40}ms both cubic-bezier(0.34, 1.56, 0.64, 1)`;
-        listEl.appendChild(item);
-      });
-    }
-
-    renderList("");
-    filter.addEventListener("input", () => renderList(filter.value));
-    filter.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        listEl.querySelector("button.model-dropdown-item")?.focus();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        listEl.querySelector("button.model-dropdown-item")?.click();
-      }
-    });
-    filter.focus();
+    renderModelDropdownList(
+      dropdown,
+      models.map((m) => m.id),
+      selectedModel,
+      selectModel,
+    );
   } catch (err) {
     dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Error: ${err.message}</div>`;
   }
 }
 
-// Arrow-key navigation within the model dropdown (Enter/Space fire the native button click).
-document.getElementById("model-dropdown")?.addEventListener("keydown", (e) => {
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  const items = Array.from(
-    document.querySelectorAll("#model-dropdown .model-dropdown-item"),
-  ).filter((el) => el.tagName === "BUTTON");
-  if (!items.length) return;
-  e.preventDefault();
-  const current = document.activeElement;
-  let idx = items.indexOf(current);
-  if (e.key === "ArrowDown") idx = (idx + 1) % items.length;
-  else idx = (idx - 1 + items.length) % items.length;
-  items[idx].focus();
-});
+attachModelDropdownKeyNav("model-dropdown");
 
 /**
  * Select and load a model, applying RP profiles if available.

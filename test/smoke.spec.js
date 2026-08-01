@@ -305,6 +305,25 @@ test('/image command generates an image message', async ({ page }) => {
   await expect(img).toHaveAttribute('src', /data:image/);
 });
 
+test('unreachable local image server shows a copy-command toast', async ({ page }) => {
+  await mockBaseEndpoints(page);
+  // Simulate mlx-omni-server not running: the request never reaches a server.
+  await page.route('**/localhost:10240/**', (route) => route.abort('connectionrefused'));
+
+  await page.addInitScript(() => {
+    localStorage.setItem('active_image_provider', 'local_image');
+  });
+
+  await page.goto('/');
+
+  await page.locator('#hero-input-box').click();
+  await page.locator('#hero-input-text').fill('/img a cup of coffee');
+  await page.locator('#hero-send-btn').click();
+
+  const toast = page.locator('#toast-top-container .toast-action-btn', { hasText: 'Copy command' });
+  await expect(toast).toBeVisible({ timeout: 10000 });
+});
+
 test('text provider presets are listed and switching providers works', async ({ page }) => {
   await mockBaseEndpoints(page);
   await page.goto('/');
@@ -342,4 +361,58 @@ test('text and image providers are selected independently', async ({ page }) => 
   await expect(page.locator('#provider-row-image [data-provider-id="local_image"]')).toHaveClass(/active/);
   await expect(page.locator('#provider-detail-image input[type="text"]')).toHaveValue('http://localhost:10240/v1');
   await expect(page.locator('#provider-row-text [data-provider-id="openai"]')).toHaveClass(/active/);
+});
+
+test('text model selector shows a Hugging Face hint when LM Studio has no models loaded', async ({ page }) => {
+  await mockBaseEndpoints(page); // /v1/models already stubbed to return zero models
+  await page.goto('/');
+
+  await page.locator('#model-selector').click();
+  await expect(page.locator('#model-dropdown')).toContainText('No models loaded in LM Studio');
+  await expect(page.locator('#model-dropdown a', { hasText: 'Browse GGUF models on Hugging Face' })).toHaveAttribute('href', /huggingface\.co/);
+});
+
+test('image model selector lists models actually available on a local provider', async ({ page }) => {
+  await mockBaseEndpoints(page);
+  await page.route('**/localhost:10240/v1/models', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [{ id: 'mlx-community/FLUX.1-schnell-4bit' }] })
+    });
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('active_image_provider', 'local_image');
+  });
+
+  await page.goto('/');
+
+  await page.locator('#image-model-selector').click();
+  const item = page.locator('#image-model-dropdown .model-dropdown-item', { hasText: 'mlx-community/FLUX.1-schnell-4bit' });
+  await expect(item).toBeVisible();
+
+  await item.click();
+  await expect(page.locator('#current-image-model-name')).toHaveText('mlx-community/FLUX.1-schnell-4bit');
+});
+
+test('image model selector shows a Hugging Face hint when no local models are loaded', async ({ page }) => {
+  await mockBaseEndpoints(page);
+  await page.route('**/localhost:10240/v1/models', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] })
+    });
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('active_image_provider', 'local_image');
+  });
+
+  await page.goto('/');
+
+  await page.locator('#image-model-selector').click();
+  await expect(page.locator('#image-model-dropdown')).toContainText('No models loaded');
+  await expect(page.locator('#image-model-dropdown a', { hasText: 'Browse MLX models on Hugging Face' })).toHaveAttribute('href', 'https://huggingface.co/mlx-community');
 });
