@@ -47,6 +47,20 @@ function initSliders() {
     });
   }
 
+  const sizeSlider = document.getElementById(DOM.imageSize);
+  const sizeVal = document.getElementById("image-size-val");
+  if (sizeSlider) {
+    const side = parseInt(imageParams.size, 10) || 1024;
+    sizeSlider.value = side;
+    if (sizeVal) sizeVal.textContent = `${side}×${side}`;
+    sizeSlider.addEventListener("input", () => {
+      const s = `${sizeSlider.value}x${sizeSlider.value}`;
+      imageParams.size = s;
+      safeSetItem("image_size", s);
+      if (sizeVal) sizeVal.textContent = `${sizeSlider.value}×${sizeSlider.value}`;
+    });
+  }
+
   initProviderUI();
 }
 
