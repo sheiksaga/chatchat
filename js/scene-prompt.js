@@ -52,6 +52,9 @@ async function buildScenePrompt(signal, onStatus, direction) {
   const moment = usable.slice(-SCENE_CONTEXT_MESSAGES).join("\n\n");
 
   if (!moment.trim()) {
+    // No conversation to summarise yet. If the user gave a direction, there's
+    // nothing to combine it with — use it verbatim rather than erroring.
+    if (direction) return direction.trim();
     throw new Error(
       "Nothing to illustrate yet — send a message first, or use /image <prompt>",
     );

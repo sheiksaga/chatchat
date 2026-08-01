@@ -210,7 +210,13 @@ async function sendMessage(text) {
 
   showChatView();
   var ta = document.getElementById("hero-input-text");
-  if (ta) ta.placeholder = currentMode === "story" ? storyHeroText() : "Ask anything…";
+  if (ta)
+    ta.placeholder =
+      currentMode === "story"
+        ? storyHeroText()
+        : currentMode === "image"
+          ? "Describe the image to generate…"
+          : "Ask anything…";
 
   chatHistory.push({ role: "user", content: text });
   resetIdleTimer();
@@ -229,6 +235,15 @@ async function sendMessage(text) {
   const imageCmd = parseImageCommand(text);
   if (imageCmd) {
     await generateImageMessage(imageCmd.prompt, { raw: imageCmd.raw });
+    document.getElementById("chat-input")?.focus();
+    return;
+  }
+
+  // Image mode: every message is a direct (verbatim) image prompt, no /image
+  // tag needed — mirrors /img rather than /image, since there's no ongoing
+  // chat context to summarise a "scene" from.
+  if (currentMode === "image") {
+    await generateImageMessage(text, { raw: true });
     document.getElementById("chat-input")?.focus();
     return;
   }

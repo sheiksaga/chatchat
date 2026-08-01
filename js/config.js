@@ -47,6 +47,20 @@ function initSliders() {
     });
   }
 
+  const sizeSlider = document.getElementById(DOM.imageSize);
+  const sizeVal = document.getElementById("image-size-val");
+  if (sizeSlider) {
+    const side = parseInt(imageParams.size, 10) || 1024;
+    sizeSlider.value = side;
+    if (sizeVal) sizeVal.textContent = `${side}×${side}`;
+    sizeSlider.addEventListener("input", () => {
+      const s = `${sizeSlider.value}x${sizeSlider.value}`;
+      imageParams.size = s;
+      safeSetItem("image_size", s);
+      if (sizeVal) sizeVal.textContent = `${sizeSlider.value}×${sizeSlider.value}`;
+    });
+  }
+
   initProviderUI();
 }
 
@@ -76,50 +90,103 @@ function resetAppearancePrefs() {
   applyAppearancePrefs();
 }
 
-/* ── Model provider (local / cloud) ─────────────────────────────── */
+/* ── Model providers (text + image, independently selectable) ──────
+   Each "kind" ('text' | 'image') gets its own pill row + detail panel
+   (Base URL/API key), rendered generically from PROVIDER_KIND below.
+   Text switches trigger model-reset/health-check side effects that
+   don't apply to images, so switchProvider() stays kind-specific. */
 
 /** Provider hint copy shown under the API key field, keyed by provider id. */
 const PROVIDER_KEY_HINTS = {
-  nanogpt: "Stored only in this browser (localStorage). Get a key at nano-gpt.com.",
-  openai: "Stored only in this browser (localStorage). Get a key at platform.openai.com.",
-  openrouter: "Stored only in this browser (localStorage). Get a key at openrouter.ai.",
+  local:
+    "LM Studio needs no key. Point Base URL at another machine's address to use it over your LAN.",
+  local_image:
+    "No key needed. Point Base URL at another machine's address to use it over your LAN — see Help for setup steps.",
+  nanogpt: "Get a key at nano-gpt.com.",
+  openai: "Get a key at platform.openai.com.",
+  openrouter: "Get a key at openrouter.ai.",
 };
 
-/** Render the cloud provider pill row (presets + custom) into #cloud-provider-row. */
-function renderCloudProviderRow() {
-  const row = document.getElementById("cloud-provider-row");
+/** Per-kind DOM ids and form field ids driving the generic render functions. */
+const PROVIDER_KIND = {
+  text: {
+    row: "provider-row-text",
+    detail: "provider-detail-text",
+    form: "add-provider-form-text",
+    formLabel: "add-provider-label-text",
+    formBaseUrl: "add-provider-baseurl-text",
+    formKey: "add-provider-key-text",
+    formAltFlag: "add-provider-images-text",
+    formLocalFlag: "add-provider-local-text",
+    altField: "images",
+    listProviders: getChatCapableProviders,
+    hasAuto: false,
+  },
+  image: {
+    row: "provider-row-image",
+    detail: "provider-detail-image",
+    form: "add-provider-form-image",
+    formLabel: "add-provider-label-image",
+    formBaseUrl: "add-provider-baseurl-image",
+    formKey: "add-provider-key-image",
+    formAltFlag: "add-provider-chat-image",
+    formLocalFlag: "add-provider-local-image",
+    altField: "chat",
+    listProviders: getImageCapableProviders,
+    hasAuto: true,
+  },
+};
+
+/** The active provider id for a kind ('auto' is only meaningful for images). */
+function activeProviderIdFor(kind) {
+  return kind === "image" ? activeImageProviderId || "auto" : activeProviderId;
+}
+
+/** Render the pill row for a provider kind ('text' | 'image'). */
+function renderProviderRow(kind) {
+  const spec = PROVIDER_KIND[kind];
+  const row = document.getElementById(spec.row);
   if (!row) return;
   row.innerHTML = "";
+  const activeId = activeProviderIdFor(kind);
 
-  const presetIds = ["nanogpt", "openai", "openrouter"];
-  const entries = presetIds
-    .map((id) => ({ id: id, label: API_PROVIDERS[id].label, custom: false }))
-    .concat(
-      getCustomProviders().map((p) => ({ id: p.id, label: p.label, custom: true })),
-    );
+  if (spec.hasAuto) {
+    const auto = document.createElement("button");
+    auto.type = "button";
+    auto.className = "mini-pill";
+    const isActive = activeId === "auto";
+    auto.setAttribute("aria-pressed", String(isActive));
+    if (isActive) auto.classList.add("active");
+    auto.textContent = "Auto";
+    auto.title =
+      "Follow the text provider when it supports images, or the only other configured image provider";
+    auto.onclick = () => selectProvider(kind, "auto");
+    row.appendChild(auto);
+  }
 
-  entries.forEach((entry) => {
+  spec.listProviders().forEach((cfg) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "mini-pill";
-    btn.dataset.providerId = entry.id;
-    btn.setAttribute("aria-pressed", String(activeProviderId === entry.id));
-    if (activeProviderId === entry.id) btn.classList.add("active");
-    btn.textContent = entry.label;
-    btn.onclick = () => switchProvider(entry.id);
+    btn.dataset.providerId = cfg.id;
+    const isActive = activeId === cfg.id;
+    btn.setAttribute("aria-pressed", String(isActive));
+    if (isActive) btn.classList.add("active");
+    btn.textContent = cfg.label;
+    btn.onclick = () => selectProvider(kind, cfg.id);
     row.appendChild(btn);
 
-    if (entry.custom) {
+    if (!API_PROVIDERS[cfg.id]) {
       const del = document.createElement("button");
       del.type = "button";
       del.className = "btn-del-char mini-pill-remove";
-      del.title = "Remove " + entry.label;
-      del.setAttribute("aria-label", "Remove " + entry.label);
+      del.title = "Remove " + cfg.label;
+      del.setAttribute("aria-label", "Remove " + cfg.label);
       del.textContent = "×";
       del.onclick = (e) => {
         e.stopPropagation();
-        if (confirm('Remove provider "' + entry.label + '"?')) {
-          removeCustomProvider(entry.id);
+        if (confirm('Remove provider "' + cfg.label + '"?')) {
+          removeCustomProvider(cfg.id);
           initProviderUI();
         }
       };
@@ -133,97 +200,142 @@ function renderCloudProviderRow() {
   addBtn.textContent = "+";
   addBtn.title = "Add custom provider";
   addBtn.onclick = () => {
-    document.getElementById("add-provider-form")?.classList.toggle("hidden");
+    document.getElementById(spec.form)?.classList.toggle("hidden");
   };
   row.appendChild(addBtn);
 }
 
-/** Show/hide the cloud provider row; activates the first cloud preset if none is active yet. */
-function toggleCloudRow() {
-  const row = document.getElementById("cloud-provider-row");
-  if (!row) return;
-  const willShow = row.classList.contains("hidden");
-  if (willShow && activeProviderId === "local") {
-    switchProvider("nanogpt");
-    return; // switchProvider() re-runs initProviderUI(), which opens the row
+/** Render the Base URL / API key detail panel for whichever provider is active in this kind. */
+function renderProviderDetail(kind) {
+  const spec = PROVIDER_KIND[kind];
+  const detail = document.getElementById(spec.detail);
+  if (!detail) return;
+  detail.innerHTML = "";
+
+  const id = activeProviderIdFor(kind);
+  if (kind === "image" && id === "auto") {
+    const hint = document.createElement("div");
+    hint.className = "settings-hint";
+    hint.textContent =
+      "Uses the text provider's image support when available, or the only other configured image provider if there's exactly one.";
+    detail.appendChild(hint);
+    return;
   }
-  row.classList.toggle("hidden", !willShow);
-  document.getElementById("prov-pill-cloud")?.classList.toggle("active", willShow);
-  if (!willShow) document.getElementById("add-provider-form")?.classList.add("hidden");
+
+  const cfg = getProviderConfig(id);
+  const isCustom = !API_PROVIDERS[id];
+
+  const baseUrlLabel = document.createElement("label");
+  baseUrlLabel.className = "settings-label";
+  const baseUrlId = "provider-detail-baseurl-" + kind;
+  baseUrlLabel.htmlFor = baseUrlId;
+  baseUrlLabel.textContent = "Base URL";
+  const baseUrlInput = document.createElement("input");
+  baseUrlInput.type = "text";
+  baseUrlInput.id = baseUrlId;
+  baseUrlInput.className = "story-config-input";
+  baseUrlInput.autocomplete = "off";
+  baseUrlInput.spellcheck = false;
+  baseUrlInput.value = cfg.baseUrl;
+  baseUrlInput.addEventListener("change", () => {
+    const val = baseUrlInput.value.trim();
+    if (!val) {
+      baseUrlInput.value = cfg.baseUrl;
+      return;
+    }
+    if (isCustom) updateCustomProvider(id, { baseUrl: val });
+    else saveProviderConfig(id, { baseUrl: val });
+    updateImageModelVisibility();
+  });
+
+  const keyLabel = document.createElement("label");
+  keyLabel.className = "settings-label";
+  const keyId = "provider-detail-key-" + kind;
+  keyLabel.htmlFor = keyId;
+  keyLabel.textContent = "API Key";
+  const keyInput = document.createElement("input");
+  keyInput.type = "password";
+  keyInput.id = keyId;
+  keyInput.className = "story-config-input";
+  keyInput.autocomplete = "off";
+  keyInput.spellcheck = false;
+  keyInput.placeholder = cfg.isLocal
+    ? "Optional for local/LAN servers"
+    : "Paste your API key";
+  keyInput.value = cfg.key || "";
+  keyInput.addEventListener("input", () => {
+    if (isCustom) updateCustomProvider(id, { key: keyInput.value.trim() });
+    else saveProviderConfig(id, { key: keyInput.value.trim() });
+    updateImageModelVisibility();
+  });
+
+  const hint = document.createElement("div");
+  hint.className = "settings-hint";
+  hint.textContent =
+    (PROVIDER_KEY_HINTS[id] ? PROVIDER_KEY_HINTS[id] + " " : "") +
+    "Stored only in this browser (localStorage).";
+
+  detail.appendChild(baseUrlLabel);
+  detail.appendChild(baseUrlInput);
+  detail.appendChild(keyLabel);
+  detail.appendChild(keyInput);
+  detail.appendChild(hint);
 }
 
-/** Read the add-provider form, create the provider, activate it, and reset the form. */
-function submitAddProviderForm() {
-  const label = document.getElementById("add-provider-label")?.value.trim();
-  const baseUrl = document.getElementById("add-provider-baseurl")?.value.trim();
-  const key = document.getElementById("add-provider-key")?.value.trim();
-  const wantsImages = !!document.getElementById("add-provider-images")?.checked;
+/** Select the provider for a kind. Text switches carry extra side effects (model reset, health check). */
+function selectProvider(kind, id) {
+  if (kind === "text") {
+    switchProvider(id);
+    return;
+  }
+  setActiveImageProvider(id);
+  renderProviderRow("image");
+  renderProviderDetail("image");
+  updateImageModelVisibility();
+  const label = id === "auto" ? "Auto" : getProviderConfig(id).label;
+  showToast("Image provider: " + label, "success");
+}
+
+/** Read an add-provider form, create the provider, activate it, and reset the form. */
+function submitAddProviderForm(kind) {
+  const spec = PROVIDER_KIND[kind];
+  const label = document.getElementById(spec.formLabel)?.value.trim();
+  const baseUrl = document.getElementById(spec.formBaseUrl)?.value.trim();
+  const key = document.getElementById(spec.formKey)?.value.trim();
+  const altFlag = !!document.getElementById(spec.formAltFlag)?.checked;
+  const isLocalFlag = !!document.getElementById(spec.formLocalFlag)?.checked;
   if (!label || !baseUrl) {
     showToast("Provider name and base URL are required", "error");
     return;
   }
-  const id = addCustomProvider({
+  const cfg = {
     label: label,
     baseUrl: baseUrl,
     key: key,
-    images: wantsImages,
-  });
-  document.getElementById("add-provider-label").value = "";
-  document.getElementById("add-provider-baseurl").value = "";
-  document.getElementById("add-provider-key").value = "";
-  document.getElementById("add-provider-images").checked = false;
-  document.getElementById("add-provider-form")?.classList.add("hidden");
-  switchProvider(id);
+    isLocal: isLocalFlag,
+    chat: kind === "text" ? true : altFlag,
+    images: kind === "image" ? true : altFlag,
+  };
+  const id = addCustomProvider(cfg);
+  document.getElementById(spec.formLabel).value = "";
+  document.getElementById(spec.formBaseUrl).value = "";
+  document.getElementById(spec.formKey).value = "";
+  document.getElementById(spec.formAltFlag).checked = false;
+  document.getElementById(spec.formLocalFlag).checked = false;
+  document.getElementById(spec.form)?.classList.add("hidden");
+  selectProvider(kind, id);
 }
 
-/** Reflect the active provider in the config UI (pills, key row, key value). */
+/** Reflect both active providers in the config UI (pills + detail panels). */
 function initProviderUI() {
-  const local = document.getElementById("prov-pill-local");
-  const cloud = document.getElementById("prov-pill-cloud");
-  const isLocal = currentProvider().isLocal;
-  if (local) {
-    local.classList.toggle("active", isLocal);
-    local.setAttribute("aria-pressed", String(isLocal));
-  }
-  if (cloud) {
-    cloud.classList.toggle("active", !isLocal);
-    cloud.setAttribute("aria-pressed", String(!isLocal));
-  }
-  document.getElementById("cloud-provider-row")?.classList.toggle("hidden", isLocal);
-
-  renderCloudProviderRow();
-
-  const keyRow = document.getElementById("provider-key-row");
-  const keyInput = document.getElementById("provider-key");
-  const keyHint = document.getElementById("provider-key-hint");
-  if (keyRow) keyRow.style.display = isLocal ? "none" : "";
-  if (keyHint) {
-    keyHint.textContent =
-      PROVIDER_KEY_HINTS[activeProviderId] ||
-      "Stored only in this browser (localStorage).";
-  }
-  if (keyInput && !keyInput.dataset.wired) {
-    keyInput.dataset.wired = "1";
-    keyInput.addEventListener("input", () => {
-      if (API_PROVIDERS[activeProviderId]) {
-        saveProviderConfig(activeProviderId, { key: keyInput.value.trim() });
-      } else {
-        // Custom provider — key lives inline in the customProviders array.
-        const list = getCustomProviders();
-        const entry = list.find((p) => p.id === activeProviderId);
-        if (entry) {
-          entry.key = keyInput.value.trim();
-          setCustomProviders(list);
-        }
-      }
-      updateImageModelVisibility();
-    });
-  }
-  if (keyInput) keyInput.value = currentProvider().key || "";
+  renderProviderRow("text");
+  renderProviderDetail("text");
+  renderProviderRow("image");
+  renderProviderDetail("image");
   updateImageModelVisibility();
 }
 
-/** Switch model provider, reset model selection, and re-check reachability. */
+/** Switch the text/chat provider, reset model selection, and re-check reachability. */
 function switchProvider(id) {
   if (id === activeProviderId) {
     setActiveProvider(id);
@@ -254,8 +366,6 @@ function switchProvider(id) {
     offlineBanner = null;
   }
   if (typeof checkAPIHealth === "function") checkAPIHealth();
-
-  updateImageModelVisibility();
 
   showToast("Switched to " + currentProvider().label, "success");
 }
@@ -324,6 +434,7 @@ document.addEventListener("keydown", (e) => {
     const panel = document.getElementById("config-panel");
     const dropdown = document.getElementById("model-dropdown");
     const storyOverlay = document.getElementById("story-settings-overlay");
+    const helpOverlay = document.getElementById("help-overlay");
 
     // Close sidebar overlay first (mobile/tablet)
     if (sidebar && sidebar.classList.contains("open")) {
@@ -331,6 +442,11 @@ document.addEventListener("keydown", (e) => {
       return;
     }
 
+    if (helpOverlay) {
+      closeHelp();
+      document.getElementById("help-btn")?.focus();
+      return;
+    }
     if (storyOverlay) {
       closeStorySettings();
       document.getElementById("edit-story-btn")?.focus();
