@@ -59,7 +59,11 @@
     </button>
 
     <!-- Sidebar backdrop (mobile/tablet overlay) -->
-    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <div
+      class="sidebar-backdrop"
+      id="sidebar-backdrop"
+      onclick="closeSidebar()"
+    ></div>
 
     <!-- ══════════════════════════════════════════════════════════════
          APP SHELL
@@ -287,6 +291,29 @@
             <div class="model-dropdown" id="image-model-dropdown"></div>
           </div>
           <div class="top-bar-right">
+            <button
+              class="top-pill top-pill-icon-only"
+              id="help-btn"
+              onclick="openHelp()"
+              title="Setup guide"
+              aria-label="Setup guide"
+            >
+              <span class="pill-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 015.83 1c0 2-3 2-3 4" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" /></svg
+              ></span>
+            </button>
             <button class="top-pill" id="config-btn" onclick="toggleConfig()">
               <span class="pill-icon"
                 ><svg
@@ -331,6 +358,14 @@
                   >
                     Story
                   </button>
+                  <button
+                    class="mini-pill"
+                    id="cfg-pill-image"
+                    onclick="setMode('image')"
+                    aria-pressed="false"
+                  >
+                    Image
+                  </button>
                 </div>
               </div>
               <button
@@ -360,96 +395,151 @@
                 Edit Story Settings
               </button>
 
-              <div class="settings-mode-row">
-                <span class="settings-label">Provider</span>
+              <div class="provider-section" id="provider-section-text">
+                <div class="settings-mode-row">
+                  <span class="settings-label">Text Provider</span>
+                </div>
                 <div
-                  class="config-mode-pills"
+                  class="config-mode-pills provider-row"
+                  id="provider-row-text"
                   role="group"
-                  aria-label="Model provider"
+                  aria-label="Text provider"
+                ></div>
+                <div class="provider-detail" id="provider-detail-text"></div>
+                <div
+                  class="story-config-input-group hidden"
+                  id="add-provider-form-text"
                 >
-                  <button
-                    class="mini-pill active"
-                    id="prov-pill-local"
-                    onclick="switchProvider('local')"
-                    aria-pressed="true"
+                  <label class="settings-label" for="add-provider-label-text"
+                    >Provider name</label
                   >
-                    Local
-                  </button>
-                  <button
-                    class="mini-pill"
-                    id="prov-pill-cloud"
-                    onclick="toggleCloudRow()"
-                    aria-pressed="false"
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-label-text"
+                    placeholder="e.g. My Proxy"
+                    autocomplete="off"
+                  />
+                  <label class="settings-label" for="add-provider-baseurl-text"
+                    >Base URL</label
                   >
-                    Cloud
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-baseurl-text"
+                    placeholder="https://api.example.com/v1"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-label" for="add-provider-key-text"
+                    >API Key</label
+                  >
+                  <input
+                    type="password"
+                    class="story-config-input"
+                    id="add-provider-key-text"
+                    placeholder="Paste your API key (leave blank for a local server)"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-images-text" />
+                    Also supports image generation (OpenAI-compatible)
+                  </label>
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-local-text" />
+                    No API key required (local or LAN server)
+                  </label>
+                  <button
+                    class="btn-compress"
+                    style="margin-top: 8px"
+                    onclick="submitAddProviderForm('text')"
+                    type="button"
+                  >
+                    Add provider
                   </button>
                 </div>
               </div>
-              <div
-                class="config-mode-pills cloud-provider-row hidden"
-                id="cloud-provider-row"
-                role="group"
-                aria-label="Cloud provider"
-              ></div>
-              <div
-                class="story-config-input-group hidden"
-                id="add-provider-form"
-              >
-                <label class="settings-label" for="add-provider-label">Provider name</label>
-                <input
-                  type="text"
-                  class="story-config-input"
-                  id="add-provider-label"
-                  placeholder="e.g. My Proxy"
-                  autocomplete="off"
-                />
-                <label class="settings-label" for="add-provider-baseurl">Base URL</label>
-                <input
-                  type="text"
-                  class="story-config-input"
-                  id="add-provider-baseurl"
-                  placeholder="https://api.example.com/v1"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <label class="settings-label" for="add-provider-key">API Key</label>
-                <input
-                  type="password"
-                  class="story-config-input"
-                  id="add-provider-key"
-                  placeholder="Paste your API key"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <label class="settings-hint" style="display:flex;align-items:center;gap:6px;margin-top:6px;">
-                  <input type="checkbox" id="add-provider-images" />
-                  Supports image generation (OpenAI-compatible)
-                </label>
-                <button
-                  class="btn-compress"
-                  style="margin-top:8px"
-                  onclick="submitAddProviderForm()"
-                  type="button"
-                >
-                  Add provider
-                </button>
-              </div>
-              <div
-                id="provider-key-row"
-                style="display: none; margin-bottom: var(--s-3)"
-              >
-                <label class="settings-label" for="provider-key">API Key</label>
-                <input
-                  type="password"
-                  class="story-config-input"
-                  id="provider-key"
-                  placeholder="Paste your API key"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <div class="settings-hint" id="provider-key-hint">
-                  Stored only in this browser (localStorage).
+
+              <div class="provider-section" id="provider-section-image">
+                <div class="settings-mode-row">
+                  <span class="settings-label">Image Provider</span>
                 </div>
+                <div
+                  class="config-mode-pills provider-row"
+                  id="provider-row-image"
+                  role="group"
+                  aria-label="Image provider"
+                ></div>
+                <div class="provider-detail" id="provider-detail-image"></div>
+                <div
+                  class="story-config-input-group hidden"
+                  id="add-provider-form-image"
+                >
+                  <label class="settings-label" for="add-provider-label-image"
+                    >Provider name</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-label-image"
+                    placeholder="e.g. My Image Proxy"
+                    autocomplete="off"
+                  />
+                  <label class="settings-label" for="add-provider-baseurl-image"
+                    >Base URL</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-baseurl-image"
+                    placeholder="http://localhost:10240/v1"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-label" for="add-provider-key-image"
+                    >API Key</label
+                  >
+                  <input
+                    type="password"
+                    class="story-config-input"
+                    id="add-provider-key-image"
+                    placeholder="Paste your API key (leave blank for a local server)"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-chat-image" />
+                    Also supports text chat (OpenAI-compatible)
+                  </label>
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-local-image" />
+                    No API key required (local or LAN server)
+                  </label>
+                  <button
+                    class="btn-compress"
+                    style="margin-top: 8px"
+                    onclick="submitAddProviderForm('image')"
+                    type="button"
+                  >
+                    Add provider
+                  </button>
+                </div>
+              </div>
+
+              <div class="settings-slider-row">
+                <label for="image-size">Image size</label>
+                <input
+                  type="range"
+                  id="image-size"
+                  min="512"
+                  max="1024"
+                  step="64"
+                  value="1024"
+                />
+                <span class="settings-slider-val" id="image-size-val"
+                  >1024×1024</span
+                >
               </div>
 
               <label class="settings-label" for="system-prompt"
@@ -627,6 +717,29 @@
                   /></svg
               ></span>
               Story Mode
+            </button>
+            <button
+              class="quick-chip"
+              id="pill-image-mode"
+              onclick="setMode('image')"
+              aria-pressed="false"
+            >
+              <span class="quick-chip-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" /></svg
+              ></span>
+              Image Mode
             </button>
           </div>
 
@@ -816,6 +929,8 @@
             </button>
           </div>
 
+          <div class="gen-stats hidden" id="hero-gen-stats" aria-live="polite"></div>
+
           <div class="hero-input-wrapper">
             <div class="hero-input" id="hero-input-box">
               <textarea
@@ -838,17 +953,17 @@
               onclick="stopGeneration()"
               title="Stop generating"
               aria-label="Stop generating"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      stroke="none"
-                    >
-                      <rect x="4" y="4" width="16" height="16" rx="2" />
-                    </svg>
-              </button>
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="none"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -857,6 +972,7 @@
 
         <!-- CHAT INPUT BAR (shown when chatting) -->
         <div class="chat-input-bar hidden" id="chat-input-bar">
+          <div class="gen-stats hidden" id="chat-gen-stats" aria-live="polite"></div>
           <div class="chat-input-box">
             <textarea id="chat-input" placeholder="Message" rows="1"></textarea>
           </div>
@@ -874,17 +990,17 @@
               onclick="stopGeneration()"
               title="Stop generating"
               aria-label="Stop generating"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              stroke="none"
             >
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-            </svg>
-          </button>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="none"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+            </button>
           </div>
         </div>
       </main>
@@ -916,6 +1032,7 @@
     <script src="js/models.js"></script>
     <script src="js/imageprofile.js"></script>
     <script src="js/config.js"></script>
+    <script src="js/help.js"></script>
     <script src="js/chatlist.js"></script>
     <script src="js/scene-prompt.js"></script>
     <script src="js/images.js"></script>

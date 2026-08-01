@@ -3,24 +3,36 @@
    ══════════════════════════════════════════════════════════════ */
 
 /**
- * Which provider config should handle image generation. If the active chat
- * provider is Local (which never serves images), fall back to whichever
- * other configured provider (preset or custom) declares image support and
- * has a key — so a local model still gets image generation when the user
- * has a cloud image API key set up, without switching chat providers. If a
- * cloud provider is active, images always follow it (even if that provider
- * lacks image support/a key — surfaced as a normal error, not silently
- * routed elsewhere).
+ * Which provider config should handle image generation.
+ *
+ * If the user has explicitly picked an image provider ({@link
+ * currentImageProvider}), that wins outright — this is how a Mac running
+ * chat locally can still send images to a cloud provider, or vice versa,
+ * without the two being coupled.
+ *
+ * Otherwise ("Auto"): if the active chat provider is Local (which never
+ * serves images), fall back to whichever other configured provider declares
+ * image support and is *actually set up* — a key (cloud), or a user-added
+ * custom provider flagged local/LAN. A built-in local preset (e.g. "Local
+ * image (MLX Omni)") does NOT count here even though it needs no key: it
+ * always exists, whether or not the user has that server running, so
+ * treating it as "configured" would silently route every /image at an
+ * unconfigured server. Picking it requires the explicit selection above. If
+ * a cloud provider is active, images always follow it (even if that
+ * provider lacks image support/a key — surfaced as a normal error, not
+ * silently routed elsewhere).
  * @returns {{cfg: object|null, ambiguous: boolean}}
  */
 function resolveImageProvider() {
+  const explicit = currentImageProvider();
+  if (explicit) return { cfg: explicit, ambiguous: false };
+
   const active = currentProvider();
   if (!active.isLocal) return { cfg: active, ambiguous: false };
 
-  const candidates = ["nanogpt", "openai", "openrouter"]
-    .map(getProviderConfig)
-    .concat(getCustomProviders().map((p) => getProviderConfig(p.id)))
-    .filter((cfg) => cfg.images && cfg.key);
+  const candidates = getImageCapableProviders().filter(
+    (cfg) => cfg.key || (cfg.isLocal && !API_PROVIDERS[cfg.id]),
+  );
 
   if (candidates.length === 1) return { cfg: candidates[0], ambiguous: false };
   if (candidates.length > 1) return { cfg: null, ambiguous: true };
@@ -47,17 +59,19 @@ async function requestImage(prompt, signal) {
   const { cfg, ambiguous } = resolveImageProvider();
   if (ambiguous) {
     throw new Error(
-      "Multiple configured providers support image generation — leave a key on only one image-capable provider, or switch to one of them as the active provider",
+      "Multiple configured providers support image generation — pick one explicitly under Image Provider in settings",
     );
   }
   if (!cfg || !cfg.images) {
     throw new Error(
-      "No provider configured for image generation — add an API key to a provider that supports images under Provider in settings",
+      "No provider configured for image generation — add one under Image Provider in settings",
     );
   }
-  if (!cfg.key) {
+  if (!cfg.key && !cfg.isLocal) {
     throw new Error(
-      "No API key set for " + cfg.label + " — add one under Provider in settings",
+      "No API key set for " +
+        cfg.label +
+        " — add one under Provider in settings",
     );
   }
 
@@ -304,10 +318,11 @@ function updateImageModelVisibility() {
   const pill = document.getElementById("image-model-selector");
   if (!pill) return;
   const { cfg } = resolveImageProvider();
-  const show = !!cfg && !!cfg.images && !!cfg.key;
+  const show = !!cfg && !!cfg.images && (!!cfg.key || !!cfg.isLocal);
   pill.classList.toggle("hidden", !show);
   // Also close the dropdown when hiding
-  if (!show) document.getElementById("image-model-dropdown")?.classList.remove("open");
+  if (!show)
+    document.getElementById("image-model-dropdown")?.classList.remove("open");
 }
 
 /** Initialise the persistent image model name label. */

@@ -305,24 +305,41 @@ test('/image command generates an image message', async ({ page }) => {
   await expect(img).toHaveAttribute('src', /data:image/);
 });
 
-test('switching to Cloud reveals provider presets and switching providers works', async ({ page }) => {
+test('text provider presets are listed and switching providers works', async ({ page }) => {
   await mockBaseEndpoints(page);
   await page.goto('/');
 
   await page.locator('#config-btn').click();
   await expect(page.locator('#config-panel')).toHaveClass(/open/);
 
-  await page.locator('#prov-pill-local').click();
-  await expect(page.locator('#prov-pill-local')).toHaveClass(/active/);
+  await expect(page.locator('#provider-row-text [data-provider-id="local"]')).toHaveClass(/active/);
+  await expect(page.locator('#provider-row-text [data-provider-id="nanogpt"]')).toBeVisible();
+  await expect(page.locator('#provider-row-text [data-provider-id="openai"]')).toBeVisible();
+  await expect(page.locator('#provider-row-text [data-provider-id="openrouter"]')).toBeVisible();
 
-  await page.locator('#prov-pill-cloud').click();
-  await expect(page.locator('#prov-pill-cloud')).toHaveClass(/active/);
-  await expect(page.locator('#cloud-provider-row')).toBeVisible();
-  await expect(page.locator('[data-provider-id="nanogpt"]')).toBeVisible();
-  await expect(page.locator('[data-provider-id="openai"]')).toBeVisible();
-  await expect(page.locator('[data-provider-id="openrouter"]')).toBeVisible();
+  await page.locator('#provider-row-text [data-provider-id="openai"]').click();
+  await expect(page.locator('#provider-row-text [data-provider-id="openai"]')).toHaveClass(/active/);
+  await expect(page.locator('#provider-detail-text input[type="password"]')).toBeVisible();
+});
 
-  await page.locator('[data-provider-id="openai"]').click();
-  await expect(page.locator('[data-provider-id="openai"]')).toHaveClass(/active/);
-  await expect(page.locator('#provider-key-row')).toBeVisible();
+test('text and image providers are selected independently', async ({ page }) => {
+  await mockBaseEndpoints(page);
+  await page.goto('/');
+
+  await page.locator('#config-btn').click();
+  await expect(page.locator('#config-panel')).toHaveClass(/open/);
+
+  // Image provider defaults to Auto and lists the built-in local preset.
+  await expect(page.locator('#provider-row-image button', { hasText: 'Auto' })).toHaveClass(/active/);
+  await expect(page.locator('#provider-row-image [data-provider-id="local_image"]')).toBeVisible();
+
+  // Switch the text provider to a cloud preset...
+  await page.locator('#provider-row-text [data-provider-id="openai"]').click();
+  await expect(page.locator('#provider-row-text [data-provider-id="openai"]')).toHaveClass(/active/);
+
+  // ...then pick an explicit image provider — the two must not couple.
+  await page.locator('#provider-row-image [data-provider-id="local_image"]').click();
+  await expect(page.locator('#provider-row-image [data-provider-id="local_image"]')).toHaveClass(/active/);
+  await expect(page.locator('#provider-detail-image input[type="text"]')).toHaveValue('http://localhost:10240/v1');
+  await expect(page.locator('#provider-row-text [data-provider-id="openai"]')).toHaveClass(/active/);
 });

@@ -3,7 +3,10 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ── Model providers ──────────────────────────────────────────────
-   Local LM Studio plus optional OpenAI-compatible cloud providers.
+   Text (chat) and image generation are resolved independently — a
+   provider can serve either or both. `chat: true` means it accepts
+   OpenAI-compatible /chat/completions; `images: true` means
+   /images/generations. `isLocal` providers never require an API key.
    The API key is stored in localStorage (browser-only app); treat it
    like any other saved credential on this machine. */
 const API_PROVIDERS = {
@@ -11,29 +14,42 @@ const API_PROVIDERS = {
     label: "LM Studio (local)",
     baseUrl: "http://localhost:1234/v1",
     isLocal: true,
+    chat: true,
+    images: false,
+  },
+  local_image: {
+    label: "Local image (MLX Omni)",
+    baseUrl: "http://localhost:10240/v1",
+    isLocal: true,
+    chat: false,
+    images: true,
   },
   nanogpt: {
     label: "NanoGPT",
     baseUrl: "https://nano-gpt.com/api/v1",
     isLocal: false,
+    chat: true,
     images: true,
   },
   openai: {
     label: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     isLocal: false,
+    chat: true,
     images: true,
   },
   openrouter: {
     label: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
     isLocal: false,
+    chat: true,
+    images: false,
   },
 };
 
 const CUSTOM_PROVIDERS_KEY = "custom_providers";
 
-/** @returns {Array<{id:string,label:string,baseUrl:string,key:string,images?:boolean}>} */
+/** @returns {Array<{id:string,label:string,baseUrl:string,key:string,chat?:boolean,images?:boolean}>} */
 function getCustomProviders() {
   const list = safeGetJSON(CUSTOM_PROVIDERS_KEY, []);
   return Array.isArray(list) ? list : [];
@@ -45,8 +61,8 @@ function setCustomProviders(list) {
 }
 
 /**
- * Add a user-defined OpenAI-compatible cloud provider.
- * @param {{label:string, baseUrl:string, key:string, images?:boolean}} cfg
+ * Add a user-defined OpenAI-compatible provider.
+ * @param {{label:string, baseUrl:string, key:string, chat?:boolean, images?:boolean, isLocal?:boolean}} cfg
  * @returns {string} The generated provider id
  */
 function addCustomProvider(cfg) {
@@ -57,10 +73,26 @@ function addCustomProvider(cfg) {
     label: cfg.label,
     baseUrl: cfg.baseUrl,
     key: cfg.key || "",
+    chat: cfg.chat !== false,
     images: !!cfg.images,
+    isLocal: !!cfg.isLocal,
   });
   setCustomProviders(list);
   return id;
+}
+
+/**
+ * Patch a custom provider's saved fields in place (baseUrl/key/chat/images).
+ * No-op for built-in providers — use {@link saveProviderConfig} for those.
+ * @param {string} id
+ * @param {object} patch
+ */
+function updateCustomProvider(id, patch) {
+  const list = getCustomProviders();
+  const entry = list.find((p) => p.id === id);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  setCustomProviders(list);
 }
 
 /**
@@ -71,6 +103,7 @@ function addCustomProvider(cfg) {
 function removeCustomProvider(id) {
   setCustomProviders(getCustomProviders().filter((p) => p.id !== id));
   if (activeProviderId === id) setActiveProvider("local");
+  if (activeImageProviderId === id) setActiveImageProvider("auto");
 }
 
 let activeProviderId = localStorage.getItem("active_provider") || "local";
@@ -84,6 +117,7 @@ function getProviderConfig(id) {
       id: id,
       label: base.label,
       isLocal: base.isLocal,
+      chat: !!base.chat,
       images: !!base.images,
       baseUrl: saved.baseUrl || base.baseUrl,
       key: saved.key || "",
@@ -94,7 +128,8 @@ function getProviderConfig(id) {
     return {
       id: custom.id,
       label: custom.label,
-      isLocal: false,
+      isLocal: !!custom.isLocal,
+      chat: custom.chat !== false,
       images: !!custom.images,
       baseUrl: custom.baseUrl,
       key: custom.key || "",
@@ -103,9 +138,42 @@ function getProviderConfig(id) {
   return getProviderConfig("local");
 }
 
-/** The currently active provider's config. */
+/** @returns {Array<object>} Every configured provider (built-in + custom) as a resolved config. */
+function getAllProviderConfigs() {
+  return Object.keys(API_PROVIDERS)
+    .concat(getCustomProviders().map((p) => p.id))
+    .map(getProviderConfig);
+}
+
+/** @returns {Array<object>} Providers usable for chat completions. */
+function getChatCapableProviders() {
+  return getAllProviderConfigs().filter((p) => p.chat);
+}
+
+/** @returns {Array<object>} Providers usable for image generation. */
+function getImageCapableProviders() {
+  return getAllProviderConfigs().filter((p) => p.images);
+}
+
+/** The currently active text/chat provider's config. */
 function currentProvider() {
   return getProviderConfig(activeProviderId);
+}
+
+/** @type {string} "auto" (derive from the chat provider, legacy behavior) or an explicit provider id. */
+let activeImageProviderId =
+  localStorage.getItem("active_image_provider") || "auto";
+
+/** Switch the explicit image provider ("auto" to go back to deriving from the chat provider). */
+function setActiveImageProvider(id) {
+  activeImageProviderId = id;
+  safeSetItem("active_image_provider", id);
+}
+
+/** The currently active image provider's config, or null when in "auto" mode. */
+function currentImageProvider() {
+  if (!activeImageProviderId || activeImageProviderId === "auto") return null;
+  return getProviderConfig(activeImageProviderId);
 }
 
 /** @type {string} Active API base URL (mutable — updated on provider switch). */
@@ -211,7 +279,7 @@ const RP_MODELS = {
   },
 };
 
-/** @type {'chat'|'story'} */
+/** @type {'chat'|'story'|'image'} */
 let currentMode = "chat";
 /** @type {{style:('cyoa'|'roleplay'|'gm'), scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
 let storyConfig = {

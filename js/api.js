@@ -47,6 +47,13 @@ async function streamResponse(messages, targetEl) {
   let buffer = "";
   let lastRender = 0;
 
+  // Live generation speed, shown next to the stop button — each SSE delta is
+  // ~one token, and elapsed time comes from wall clock, so no server-reported
+  // total length is needed.
+  const genStart = performance.now();
+  let tokenCount = 0;
+  let lastStatsUpdate = 0;
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -68,6 +75,7 @@ async function streamResponse(messages, targetEl) {
           if (content) {
             targetEl.classList.remove("loading-indicator");
             fullResponse += content;
+            tokenCount++;
             // Throttle renders to ~30fps to reduce layout thrash during streaming
             const now = performance.now();
             if (now - lastRender >= 33) {
@@ -81,6 +89,10 @@ async function streamResponse(messages, targetEl) {
               }
               lastRender = now;
             }
+            if (now - lastStatsUpdate >= 250) {
+              updateGenStats(tokenCount, now - genStart);
+              lastStatsUpdate = now;
+            }
           }
         } catch (e) {
           /* skip malformed chunks */
@@ -90,6 +102,8 @@ async function streamResponse(messages, targetEl) {
   } catch (err) {
     // Aborted mid-stream — keep whatever streamed so far rather than discarding it
     if (err.name !== "AbortError") throw err;
+  } finally {
+    updateGenStats(0);
   }
 
   // Final render to catch any remaining content
@@ -100,6 +114,31 @@ async function streamResponse(messages, targetEl) {
   }
 
   return fullResponse;
+}
+
+/**
+ * Update (or hide) the live "N tok/s · Ns" readout next to the stop button.
+ * There's no server-reported total length to derive a true ETA from, so this
+ * shows generation speed and elapsed time rather than a time-remaining guess.
+ * @param {number} tokenCount - tokens streamed so far; 0 hides the readout
+ * @param {number} [elapsedMs]
+ */
+function updateGenStats(tokenCount, elapsedMs) {
+  const elems = document.querySelectorAll(".gen-stats");
+  if (!tokenCount) {
+    elems.forEach((el) => {
+      el.classList.add("hidden");
+      el.textContent = "";
+    });
+    return;
+  }
+  const elapsedSec = elapsedMs / 1000;
+  const rate = tokenCount / elapsedSec;
+  const text = `${rate.toFixed(1)} tok/s · ${elapsedSec.toFixed(1)}s`;
+  elems.forEach((el) => {
+    el.textContent = text;
+    el.classList.remove("hidden");
+  });
 }
 
 /** Stop the current streaming generation */

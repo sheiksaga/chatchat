@@ -279,56 +279,49 @@ function syncStoryStyleUI() {
 }
 
 /**
- * Switch between chat and story mode. Updates pills, toggles story config visibility.
- * @param {'chat'|'story'} mode
+ * Switch between chat, story, and image mode. Updates pills, toggles story
+ * config visibility.
+ * @param {'chat'|'story'|'image'} mode
  */
 function setMode(mode) {
   currentMode = mode;
-  const chatPill = document.getElementById("pill-chat-mode");
-  const storyPill = document.getElementById("pill-story-mode");
+  const pills = {
+    chat: document.getElementById("pill-chat-mode"),
+    story: document.getElementById("pill-story-mode"),
+    image: document.getElementById("pill-image-mode"),
+  };
+  const cfgPills = {
+    chat: document.getElementById("cfg-pill-chat"),
+    story: document.getElementById("cfg-pill-story"),
+    image: document.getElementById("cfg-pill-image"),
+  };
   const storyConfigEl = document.getElementById("story-config");
-  const heroPlaceholder = document.getElementById("hero-placeholder");
   const promptChips = document.getElementById("prompt-chips");
-  // Config-panel mirrors (let the user switch mode mid-chat)
-  const cfgChat = document.getElementById("cfg-pill-chat");
-  const cfgStory = document.getElementById("cfg-pill-story");
   const editStoryBtn = document.getElementById("edit-story-btn");
+  const ta = document.getElementById("hero-input-text");
 
-  if (mode === "chat") {
-    chatPill.classList.add("active");
-    chatPill.setAttribute("aria-pressed", "true");
-    storyPill.classList.remove("active");
-    storyPill.setAttribute("aria-pressed", "false");
-    if (storyConfigEl) storyConfigEl.classList.add("hidden");
-    if (promptChips) promptChips.classList.remove("hidden");
-    if (ta) ta.placeholder = "Ask anything…";
-    if (cfgChat) {
-      cfgChat.classList.add("active");
-      cfgChat.setAttribute("aria-pressed", "true");
-    }
-    if (cfgStory) {
-      cfgStory.classList.remove("active");
-      cfgStory.setAttribute("aria-pressed", "false");
-    }
-    if (editStoryBtn) editStoryBtn.style.display = "none";
-  } else {
-    storyPill.classList.add("active");
-    storyPill.setAttribute("aria-pressed", "true");
-    chatPill.classList.remove("active");
-    chatPill.setAttribute("aria-pressed", "false");
-    if (storyConfigEl) storyConfigEl.classList.remove("hidden");
-    if (promptChips) promptChips.classList.add("hidden");
-    renderStoryConfig();
-    if (ta) ta.placeholder = storyHeroText();
-    if (cfgStory) {
-      cfgStory.classList.add("active");
-      cfgStory.setAttribute("aria-pressed", "true");
-    }
-    if (cfgChat) {
-      cfgChat.classList.remove("active");
-      cfgChat.setAttribute("aria-pressed", "false");
-    }
-    if (editStoryBtn) editStoryBtn.style.display = "";
+  Object.keys(pills).forEach((id) => {
+    const active = id === mode;
+    [pills[id], cfgPills[id]].forEach((el) => {
+      if (!el) return;
+      el.classList.toggle("active", active);
+      el.setAttribute("aria-pressed", String(active));
+    });
+  });
+
+  if (storyConfigEl) storyConfigEl.classList.toggle("hidden", mode !== "story");
+  if (promptChips) promptChips.classList.toggle("hidden", mode !== "chat");
+  if (editStoryBtn) editStoryBtn.style.display = mode === "story" ? "" : "none";
+
+  if (mode === "story") renderStoryConfig();
+
+  if (ta) {
+    ta.placeholder =
+      mode === "story"
+        ? storyHeroText()
+        : mode === "image"
+          ? "Describe the image to generate…"
+          : "Ask anything…";
   }
 
   // Persist the chosen mode so it survives reloads / chat switches.

@@ -30,6 +30,10 @@
   --accent: #6ea8fe;
   --radius: 8px;
   --gap: 12px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
   --sidebar-w: 240px;
   --sidebar-collapsed-w: 0px;
   --sidebar-overlay-w: min(85vw, 320px);
@@ -195,7 +199,9 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--stroke) transparent;
   /* Transition for collapse / overlay slide */
-  transition: flex-basis 0.25s ease, transform 0.25s ease,
+  transition:
+    flex-basis 0.25s ease,
+    transform 0.25s ease,
     box-shadow 0.25s ease;
 }
 
@@ -584,6 +590,12 @@ body {
   font-size: 0.85em;
 }
 
+.gen-stats {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Story-mode text roles */
 .story-speech {
   color: #cfe3ff;
@@ -729,6 +741,53 @@ body {
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   overflow-y: auto;
+}
+
+.help-modal {
+  max-width: min(640px, 92vw);
+  text-align: left;
+}
+
+.help-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.help-section h3 {
+  margin: 0 0 var(--s-2);
+  font-size: 0.95em;
+  color: var(--text);
+}
+
+.help-section p,
+.help-section ol,
+.help-section ul {
+  margin: 0 0 var(--s-2);
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.help-section ol,
+.help-section ul {
+  padding-left: 1.3em;
+}
+
+.help-section li + li {
+  margin-top: 4px;
+}
+
+.help-section a {
+  color: var(--accent);
+}
+
+.help-section code {
+  background: var(--bg);
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.92em;
 }
 
 .confirm-dialog-actions {
@@ -1118,7 +1177,7 @@ select:focus {
   border-color: rgba(217, 116, 116, 0.3);
 }
 
-.cloud-provider-row {
+.provider-row {
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
@@ -1127,6 +1186,36 @@ select:focus {
   font-size: 1em;
   line-height: 1;
   padding: 4px 6px;
+}
+
+/* ── Text/image provider sections ─────────────────────────────── */
+
+.provider-section {
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--stroke);
+}
+
+.provider-detail {
+  margin-bottom: var(--s-2);
+}
+
+.provider-detail .story-config-input {
+  margin-bottom: var(--s-2);
+}
+
+.provider-form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.top-pill-icon-only {
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
 }
 
 .story-config-input-group {

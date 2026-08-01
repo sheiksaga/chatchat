@@ -32,10 +32,11 @@ itself is plain HTML/CSS/JS loaded directly by the browser.
 
 ## Verifying a change
 
-`npm test` runs 9 Playwright smoke tests covering the hero view, chat
+`npm test` runs 11 Playwright smoke tests covering the hero view, chat
 transcript rendering (markdown + sanitization), `localStorage` persistence,
-sidebar chat CRUD, delete-undo, and the `/image` path. `playwright.config.js`
-starts and stops `python -m http.server` on **port 8765** itself — you do not
+sidebar chat CRUD, delete-undo, the `/image` path, and independent text/image
+provider selection. `playwright.config.js` starts and stops
+`python -m http.server` on **port 8765** itself — you do not
 need to run a server. `npm run test:ui` opens the interactive runner.
 
 **Every network call is mocked with `page.route()`.** The suite must keep
@@ -103,12 +104,26 @@ There are currently **zero** raw `localStorage.setItem` or
 wrapper itself. Keep it that way. `getChatIndex`/`setChatIndex` and
 `getChatMeta`/`setChatMeta` (also `state.js`) wrap the two structured keys.
 
-**Provider abstraction (`state.js`).** `API_PROVIDERS` registers `local`
-(LM Studio) and `nanogpt` (cloud). `getProviderConfig`/`currentProvider`
-resolve the active provider's `baseUrl`/`key`; `apiHeaders()` adds an
-`Authorization: Bearer` header only when the active provider has a key.
-Switching providers (`config.js`'s `switchProvider`) clears the selected
-model since model lists aren't shared across providers.
+**Provider abstraction (`state.js`).** Text (chat) and image generation are
+selected **independently** — a Mac can run text locally via LM Studio while
+sending images to a cloud provider, or the reverse. `API_PROVIDERS` registers
+`local` (LM Studio, text only), `local_image` (MLX Omni Server, image only —
+the wired-in local FLUX path for Apple Silicon), and the cloud presets
+`nanogpt`/`openai`/`openrouter`, each flagged with `chat`/`images` booleans.
+Custom providers (`getCustomProviders`/`addCustomProvider`) carry the same
+flags plus `isLocal` (set via the "No API key required" checkbox in the
+add-provider form — lets a LAN server skip the key requirement).
+
+`getProviderConfig`/`currentProvider` resolve the active **text** provider's
+`baseUrl`/`key`; `apiHeaders()` adds an `Authorization: Bearer` header only
+when it has a key. Switching text providers (`config.js`'s `switchProvider`)
+clears the selected model since model lists aren't shared across providers.
+`activeImageProviderId`/`currentImageProvider()` track the **image** provider
+separately, defaulting to `"auto"` (see the image-generation section below).
+`getChatCapableProviders()`/`getImageCapableProviders()` (`state.js`) list
+providers for the two independent pill rows in the config panel
+(`config.js`'s `PROVIDER_KIND`-driven `renderProviderRow`/`renderProviderDetail`,
+generic over `'text'|'image'`).
 
 **Two conversation modes.** `chat` mode uses the freeform `#system-prompt`
 textarea. `story` mode (`chat.js`) builds its system prompt from
@@ -144,10 +159,16 @@ picture instead of a chat reply. `sendMessage()` (`chat.js`) dispatches on
 model to describe the current scene from recent messages, so the image follows
 the story. `/img` skips the summariser and uses the text verbatim.
 
-This pipeline is **always NanoGPT**, regardless of the active chat provider —
-`imageApiBase()`/`imageApiHeaders()` (`state.js`) resolve `IMAGE_PROVIDER_ID`
-independently. LM Studio does not serve images, so `/image` while the chat
-provider is `local` is expected, not a bug.
+`resolveImageProvider()` (`images.js`) picks which provider actually serves
+the request. An explicit selection (`activeImageProviderId` not `"auto"`)
+always wins. In `"auto"` mode: if the active *text* provider is non-local, it
+also serves images (even if it lacks image support — surfaced as a normal
+error). If the text provider is local, `resolveImageProvider()` falls back to
+the one other configured image-capable provider that's actually set up (has
+a key, or is a user-added custom provider flagged local/LAN) — ambiguous if
+more than one qualifies. The built-in `local_image` preset deliberately does
+**not** count as "configured" for auto-detection (it always exists whether
+or not that server is running); picking it requires the explicit selector.
 
 `imageprofile.js` holds the *per-chat* look on `chat_meta[chatId].imageProfile`
 (not a top-level key): a fixed random seed, a style string, and a map of
@@ -164,9 +185,17 @@ is gone but the message survives.
 **Views (`view.js`).** Only two top-level views exist — the hero/landing
 screen and the chat transcript — toggled via `showHeroView()`/`showChatView()`.
 
+**Setup guide (`help.js`).** The `?` button next to Configuration
+(`openHelp()`/`closeHelp()`) opens a static modal — same overlay pattern as
+story settings — covering local text/image setup on Mac and Windows, using a
+local model over LAN, and quick tips for the cloud presets. `HELP_CONTENT_HTML`
+is hardcoded trusted markup (no user data), so it's set via `innerHTML`
+directly rather than through the markdown/DOMPurify pipeline used for chat
+content.
+
 ## Known rough edges
 
-- `index.html` still has **35 inline `onclick=` handlers**. Extracting them is
+- `index.html` still has **38 inline `onclick=` handlers**. Extracting them is
   planned (§6/§10 of `imprve_llm.md`) but not done.
 - `js/dom.js` exists and is loaded, but **nothing uses it yet** — it's the id
   map for that extraction. Don't assume ids are centralized; grep
