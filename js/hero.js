@@ -67,41 +67,7 @@ function usePromptChip(el) {
 }
 
 /**
- * Put an image command into a composer, for the discoverability chip/button.
- *
- * Deliberately *inserts* rather than sends. A bare `/image` is only valid once
- * there is something to illustrate — in an empty chat it fails — so a control
- * that fired immediately would be a button that sometimes just errors. It
- * would also teach nothing: a control that sends `/image` for you leaves the
- * user still not knowing the command exists. Inserting shows them, keeps the
- * caret ready, and makes Enter or a subject line equally immediate.
- *
- * An existing command is never doubled up, so clicking twice (or clicking
- * after typing `/img` by hand) is harmless, and a command typed second is
- * hoisted to the front where the parser expects it.
- *
- * @param {string} targetId - id of the textarea to fill
- * @param {string} [command] - defaults to `/image`
- */
-function insertImageCommand(targetId, command) {
-  const ta = document.getElementById(targetId);
-  if (!ta) return;
-  const token = command || "/image";
-  if (!/^\s*\/(image|img)\b/i.test(ta.value)) {
-    const rest = ta.value.trim();
-    ta.value = rest ? `${token} ${rest}` : `${token} `;
-  }
-  ta.focus();
-  ta.setSelectionRange(ta.value.length, ta.value.length);
-  // `input` drives the send button state and the hero textarea's autosize.
-  ta.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-/**
- * Keep the composer hints in step with the current mode.
- *
- * Named in the placeholder because `/image` is the only way to get a picture
- * once a chat is open, and nothing else in the UI would mention it.
+ * Keep the composer placeholder in step with the current mode.
  */
 function updateComposerHints() {
   const chatInput = document.getElementById("chat-input");
@@ -110,14 +76,8 @@ function updateComposerHints() {
       currentMode === "image"
         ? "Describe the image to generate…"
         : currentMode === "story"
-          ? "Write your reply — or /image to illustrate"
-          : "Message — or /image to illustrate";
-  }
-  // In image mode every message is already an image request, so the command
-  // is redundant and the control would only be noise.
-  for (const id of ["hero-image-chip", "chat-image-btn"]) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("hidden", currentMode === "image");
+          ? "Write your reply"
+          : "Message";
   }
 }
 

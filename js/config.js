@@ -47,179 +47,7 @@ function initSliders() {
     });
   }
 
-  const sizeSlider = document.getElementById(DOM.imageSize);
-  const sizeVal = document.getElementById("image-size-val");
-  if (sizeSlider) {
-    const side = parseInt(imageParams.size, 10) || 1024;
-    sizeSlider.value = side;
-    if (sizeVal) sizeVal.textContent = `${side}×${side}`;
-    sizeSlider.addEventListener("input", () => {
-      const s = `${sizeSlider.value}x${sizeSlider.value}`;
-      imageParams.size = s;
-      safeSetItem("image_size", s);
-      if (sizeVal) sizeVal.textContent = `${sizeSlider.value}×${sizeSlider.value}`;
-    });
-  }
-
-  const stepsSlider = document.getElementById(DOM.imageSteps);
-  const stepsVal = document.getElementById("image-steps-val");
-  if (stepsSlider) {
-    stepsSlider.value = imageParams.steps;
-    if (stepsVal) stepsVal.textContent = String(imageParams.steps);
-    stepsSlider.addEventListener("input", () => {
-      const val = parseInt(stepsSlider.value, 10);
-      imageParams.steps = val;
-      safeSetItem("image_steps", String(val));
-      if (stepsVal) stepsVal.textContent = String(val);
-    });
-  }
-
-  const loraPathInput = document.getElementById(DOM.imageLoraPath);
-  if (loraPathInput) {
-    loraPathInput.value = imageParams.loraPath;
-    loraPathInput.addEventListener("change", () => {
-      const val = loraPathInput.value.trim();
-      imageParams.loraPath = val;
-      safeSetItem("image_lora_path", val);
-    });
-  }
-
-  const loraScaleSlider = document.getElementById(DOM.imageLoraScale);
-  const loraScaleVal = document.getElementById("image-lora-scale-val");
-  if (loraScaleSlider) {
-    loraScaleSlider.value = imageParams.loraScale;
-    if (loraScaleVal) loraScaleVal.textContent = imageParams.loraScale.toFixed(2);
-    loraScaleSlider.addEventListener("input", () => {
-      const val = parseFloat(loraScaleSlider.value);
-      imageParams.loraScale = val;
-      safeSetItem("image_lora_scale", String(val));
-      if (loraScaleVal) loraScaleVal.textContent = val.toFixed(2);
-    });
-  }
-
-  initComfySettings();
   initProviderUI();
-}
-
-/* ── ComfyUI settings ─────────────────────────────────────────────
-   Only meaningful when ComfyUI is the selected image provider, so the whole
-   block is hidden the rest of the time rather than showing controls that
-   silently do nothing. */
-
-/** Populate and wire the ComfyUI-only controls. */
-function initComfySettings() {
-  const select = document.getElementById("comfy-workflow");
-  const pasted = document.getElementById("comfy-workflow-json");
-  const clearBtn = document.getElementById("comfy-workflow-clear");
-  const status = document.getElementById("comfy-workflow-status");
-  const aspect = document.getElementById("comfy-aspect");
-  const cfg = document.getElementById("comfy-cfg");
-  const cfgVal = document.getElementById("comfy-cfg-val");
-  const negative = document.getElementById("comfy-negative-prompt");
-
-  if (select) {
-    const builtins = builtinComfyWorkflows();
-    select.innerHTML = "";
-    if (!builtins.length) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "No bundled workflows — paste one below";
-      select.appendChild(opt);
-      select.disabled = true;
-    } else {
-      for (const w of builtins) {
-        const opt = document.createElement("option");
-        opt.value = w.id;
-        opt.textContent = w.label;
-        select.appendChild(opt);
-      }
-      select.value = getComfyWorkflowId();
-    }
-    updateComfyWorkflowHint();
-    select.addEventListener("change", () => {
-      setComfyWorkflowId(select.value);
-      updateComfyWorkflowHint();
-    });
-  }
-
-  if (pasted) {
-    pasted.value = getCustomComfyWorkflow();
-    pasted.addEventListener("change", () => {
-      setCustomComfyWorkflow(pasted.value);
-      updateComfyWorkflowHint();
-    });
-  }
-
-  if (clearBtn && pasted) {
-    clearBtn.addEventListener("click", () => {
-      pasted.value = "";
-      setCustomComfyWorkflow("");
-      updateComfyWorkflowHint();
-      if (status) status.textContent = "Pasted workflow cleared";
-    });
-  }
-
-  if (aspect) {
-    aspect.value = getComfyAspect();
-    aspect.addEventListener("change", () => {
-      setComfyAspect(aspect.value);
-      updateComfyWorkflowHint();
-    });
-  }
-
-  if (cfg) {
-    cfg.value = String(getComfyCfg());
-    if (cfgVal) cfgVal.textContent = getComfyCfg().toFixed(1);
-    cfg.addEventListener("input", () => {
-      setComfyCfg(cfg.value);
-      if (cfgVal) cfgVal.textContent = parseFloat(cfg.value).toFixed(1);
-    });
-  }
-
-  if (negative) {
-    negative.value = getComfyNegativePrompt();
-    negative.addEventListener("change", () => {
-      setComfyNegativePrompt(negative.value);
-    });
-  }
-
-  updateComfySettingsVisibility();
-}
-
-/**
- * Describe the workflow that will actually be used, including whether a pasted
- * override is winning — the picker and the textarea can disagree, and which one
- * wins is not otherwise visible.
- */
-function updateComfyWorkflowHint() {
-  const hint = document.getElementById("comfy-workflow-hint");
-  const select = document.getElementById("comfy-workflow");
-  if (!hint) return;
-
-  const active = getActiveComfyWorkflow();
-  const pastedInUse = !!getCustomComfyWorkflow();
-
-  if (select) select.disabled = pastedInUse || !builtinComfyWorkflows().length;
-
-  if (!active) {
-    hint.textContent = "No workflow available — paste one below.";
-    return;
-  }
-
-  const [w, h] = comfyDimensions();
-  hint.textContent = pastedInUse
-    ? `Using the pasted workflow (${w} x ${h}). Clear it to go back to the bundled picker.`
-    : `Using ${active.label} at ${w} x ${h}.`;
-}
-
-/** Show the ComfyUI block only when ComfyUI is the chosen image provider. */
-function updateComfySettingsVisibility() {
-  const block = document.getElementById("comfy-settings");
-  if (!block) return;
-  const cfg = resolveImageProvider().cfg || currentImageProvider();
-  const isComfy = !!cfg && cfg.api === "comfyui";
-  block.classList.toggle("hidden", !isComfy);
-  if (isComfy) updateComfyWorkflowHint();
 }
 
 /** Apply saved appearance prefs (message width, font size) to CSS vars + sliders. */
@@ -403,7 +231,6 @@ function renderProviderDetail(kind) {
     }
     if (isCustom) updateCustomProvider(id, { baseUrl: val });
     else saveProviderConfig(id, { baseUrl: val });
-    updateImageModelVisibility();
   });
 
   const keyLabel = document.createElement("label");
@@ -424,7 +251,6 @@ function renderProviderDetail(kind) {
   keyInput.addEventListener("input", () => {
     if (isCustom) updateCustomProvider(id, { key: keyInput.value.trim() });
     else saveProviderConfig(id, { key: keyInput.value.trim() });
-    updateImageModelVisibility();
   });
 
   const hint = document.createElement("div");
@@ -449,8 +275,6 @@ function selectProvider(kind, id) {
   setActiveImageProvider(id);
   renderProviderRow("image");
   renderProviderDetail("image");
-  updateImageModelVisibility();
-  updateComfySettingsVisibility();
   const label = id === "auto" ? "Auto" : getProviderConfig(id).label;
   showToast("Image provider: " + label, "success");
 }
@@ -491,8 +315,6 @@ function initProviderUI() {
   renderProviderDetail("text");
   renderProviderRow("image");
   renderProviderDetail("image");
-  updateImageModelVisibility();
-  updateComfySettingsVisibility();
 }
 
 /** Switch the text/chat provider, reset model selection, and re-check reachability. */

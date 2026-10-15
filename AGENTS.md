@@ -33,8 +33,9 @@ notes under Architecture.
   `http://localhost:8081/v1` and needs no model preloaded — see the provider
   notes under Architecture for how the two differ.
 - **The app has no build step, but the repo does have a `package.json`.** It
-  exists only for dev tooling (Playwright, prettier) and `npm run sync-cards`
-  — nothing in `node_modules/` is loaded by the app, ever.
+  exists only for dev tooling (prettier) and the two `sync-*` scripts below
+  — nothing in `node_modules/` is loaded by the app, ever. `npm run serve`
+  starts the static server; there is no test runner.
 - To pull characters out of a SillyTavern install:
   `npm run sync-cards "<path-to-sillytavern>"`. It accepts either the ST root
   or its `characters/` directory, writes `cards/cards.js` plus
@@ -52,70 +53,39 @@ notes under Architecture.
 
 ## Verifying a change
 
-`npm test` runs 92 Playwright tests in `test/`, all of them hermetic:
+**There is no automated test suite.** Playwright and the `test/` directory were
+removed deliberately — the suite took minutes to run and the app is a
+no-build, client-only page that is faster to exercise by hand. Do not
+reintroduce a test framework without being asked.
 
-- `smoke.spec.js` (24) — hero view, chat transcript rendering (markdown +
-sanitization), `localStorage` persistence, sidebar chat CRUD, delete-undo, the
-`/image` path, independent text/image provider selection, the setup guide,
-the bundled card manifest being loaded, and the `/image` discoverability
-affordances (chip inserts rather than sends, no duplicate token, hidden in
-image mode, shown in story mode).
-- `character.spec.js` (15) — cast picker visibility, greeting seeding,
-alternate-greeting swipes, the assembled character prompt (card fields,
-speaker prefixes, the primed final turn, stop strings), PNG card parsing,
-and the card editor. These use `mockEmptyCardLibrary()` to own the card
-library they assert on.
-- `comfyui.spec.js` (20) — the ComfyUI transport: graph posted to `/prompt` and
-collected from `/history` + `/view`, no `/images/generations` call, locked seed
-reuse within a chat, aspect presets, checkpoint discovery, both placeholder
-conventions (over every bundled workflow), and img2img/editor-format error paths.
-- `scenestate.spec.js` (15) — the per-chat scene record: parsing fenced,
-padded and sloppy model replies, junk-proofing, merge semantics, chat
-lifecycle, and an end-to-end assertion that the record's clothing and location
-reach the workflow ComfyUI receives.
-- `llamacpp.spec.js` (10) — the llama.cpp provider: no load/unload calls, hidden
-eject button, samplers adopted from `/props`, `/props` cache, and graceful
-degradation when `/props` is missing, erroring, or differently shaped.
-- `offline.spec.js` (4) — what the app says when the configured server is
-unreachable or returns an error status (`route.abort('connectionrefused')`).
-- `sync-cards.spec.js` (4) — runs the same inputs through
-`tools/sync-cards.js` and `js/cards.js` and requires identical output, so the
-deliberately duplicated parser cannot drift.
+What that means in practice:
 
-Shared mocks live in `test/helpers.js` (`solidPng()` builds a real PNG of a
-given size, which is what lets the image-layout test assert on aspect ratio
-rather than on a 1x1 placeholder that no layout rule can fail;
-`mockEmptyCardLibrary()` neutralises the synced manifest).
+- **The browser console is the primary signal.** The app is client-only, so
+errors surface there rather than in a build or a test runner. Check it after
+your change, not just the happy-path UI.
+- `node tools/serve.js [port]` (or `npm run serve`) serves the directory
+statically. Opening `index.html` directly as a `file://` page works too and
+must keep working — that constraint is why vendored libs and generated
+manifests are loaded by relative path.
+- Exercise the change in a browser. Network calls to LM Studio, ComfyUI, or a
+cloud provider will fail unless that backend is actually running; that is
+expected, and the failure messages are themselves worth reading.
+- `npm run format` runs prettier. There is no linter.
 
-`captureChatRequest()` records only `stream: true` requests. Not every call to
-`/v1/chat/completions` is the assistant reply — the app also makes one-shot
-non-streaming calls to summarise a scene, lock character appearances, update the
-scene record, and compress history. Capturing one of those would silently swap
-the request under assertion for a helper call, which reads like the app sending
-the wrong prompt.
+Some invariants are worth checking by hand, since nothing pins them now:
 
-**Every network call is mocked with `page.route()`.** The suite must keep
-passing with no LM Studio running, no API key, and no SillyTavern install. A
-test that needs a live backend — or a populated `cards/cards.js` — does not
-belong here; `character.spec.js` injects synthetic cards through
-`localStorage` instead of relying on whatever was last synced.
-
-`playwright.config.js` starts and stops `node tools/serve.js` itself — you do
-not need to run a server. Two things about it are deliberate:
-
-- **Node, not `python -m http.server`.** Python is not reliably on PATH; on
-  Windows `python3` is usually the Microsoft Store stub, which exits instantly
-  and leaves Playwright waiting on a port that never opens.
-- **`reuseExistingServer` is opt-in (`PW_REUSE_SERVER=1`), not on by default.**
-  Reusing whatever already holds the port means an unrelated server squats it,
-  every locator fails against the wrong app, and the run looks like a code
-  breakage. A busy port now fails loudly instead. If the default port is taken,
-  use `PORT=8799 npm test`.
-
-`npm run test:ui` opens the interactive runner.
-
-Because the app is client-only, the browser console is still the primary
-signal for anything the suite doesn't cover.
+- `safeSetItem` / `safeGetJSON` are the only `localStorage` access points.
+- `getProviderConfig()` whitelists registry flags — a new flag must be added
+  there *and* to `API_PROVIDERS`, or it is silently dropped.
+- `getCards()` merge order: synced manifest → `localStorage` → tombstones.
+- Placeholder substitution is quoted-first, and an unmapped placeholder is a
+  hard error.
+- Overlay z-index order: sidebar 25 · mobile menu 40 · story settings 50 ·
+  card editor 55 · confirm 58 · toasts 60/70.
+- The hero is only ever shown with an *empty* transcript — every
+  `showHeroView()` call site is either guarded by `chatHistory.length === 0`
+  or preceded by `chatHistory = []`. Any image affordance on the hero must
+  therefore avoid promising a scene that does not exist yet.
 
 ## Architecture
 
@@ -320,7 +290,8 @@ transcript text.
 through `fetchApi()`, not bare `fetch()`. A rejected fetch becomes an `Error`
 whose message names the host and both possible causes, with
 `err.networkUnreachable === true` so callers can tell "never got a response"
-from "the server answered with an error status". `offline.spec.js` pins that.
+from "the server answered with an error status". That distinction matters
+when diagnosing a failure.
 
 Two things make this worth the ceremony, and both are easy to get wrong:
 
@@ -431,8 +402,9 @@ invalid JSON that breaks every ComfyInject-style workflow at once while the
 SillyTavern-style default keeps working. An unmapped placeholder is a **hard
 error** naming itself rather than a warning: a leftover `%seed%` reaches ComfyUI
 as literal text, and the error it returns names the node but not the cause.
-`test/comfyui.spec.js` runs *every* bundled workflow through this and asserts
-valid JSON, no leftovers, and that numeric fields stayed numbers.
+Check every bundled workflow in `workflows/workflows.js` after touching this:
+the substitution must produce valid JSON, leave no placeholder behind, and
+keep numeric fields numeric.
 
 **Checkpoint discovery uses the single-node form.**
 `GET /object_info/CheckpointLoaderSimple` is 926 bytes against ~2MB for the full
@@ -480,7 +452,7 @@ correct even when the background pass failed or a chat switch interrupted it.
 Both are gated by `sceneTrackingEnabled()` on the chat having a cast, so a plain
 chat pays nothing.
 
-Four properties are load bearing, and each has tests:
+Four properties are load bearing, and each is easy to break silently:
 
 - **Advisory, never load-bearing.** Every path degrades to the previous record
   or to no record. `parseSceneStateJSON()` handles fenced blocks, preamble,
@@ -560,7 +532,8 @@ several overlays share `z-index: 50` and then DOM order decides:
 confirm dialog 58 · toasts 60/70`. The card editor must outrank the story
 settings modal that opened it, and a confirm raised from inside the editor
 must outrank both. Break that and the editor renders but its buttons are
-unclickable — which is exactly what the tests caught.
+unclickable — a failure that only shows up as "the button does nothing" in the
+browser, with no console error.
 
 **Hero overflow.** `.hero-region` uses `justify-content: safe center`, not
 `center`. Plain `center` puts the top of the content at a negative offset once

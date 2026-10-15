@@ -555,14 +555,8 @@ document.addEventListener("DOMContentLoaded", () => {
   marked.setOptions({ breaks: true, gfm: true, renderer: codeRenderer });
   hljs.configure({ cssSelector: "pre code" });
   initSliders();
-  initImageModelName();
-  updateImageModelVisibility();
   init();
   startOfflineDetection();
-  // Generated images are capped to the transcript's real height, which changes
-  // with the viewport (and when the chat view replaces the hero).
-  updateGeneratedImageHeight();
-  window.addEventListener("resize", updateGeneratedImageHeight);
   document
     .getElementById("chat-input")
     .addEventListener("keydown", handleChatKeydown);

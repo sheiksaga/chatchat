@@ -150,7 +150,6 @@ function toggleCastCard(id) {
     // Only the lead's greeting opens the scene — supporting cards join a
     // scene that already exists.
     if (card && storyConfig.castIds.length === 1) {
-      lockAppearanceForCard(card);
       if (seedGreeting(card)) {
         showChatView();
         renderMessages();

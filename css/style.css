@@ -166,18 +166,6 @@ body {
   color: var(--muted);
 }
 
-.image-model-pill {
-  border-left: 1px solid var(--stroke);
-  padding-left: 8px;
-  margin-left: 2px;
-}
-
-.pill-icon-img {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
 /* ── 4. Sidebar ───────────────────────────────────────────────── */
 
 /* Sidebar toggle button (inside sidebar) — only shown on mobile overlay */
@@ -522,27 +510,6 @@ body {
   border-color: var(--muted);
 }
 
-/* The /image affordance reads as a command rather than a sample prompt, so it
-   is tinted with the accent and shows the literal token it inserts. */
-.prompt-chip-cmd {
-  gap: 7px;
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--stroke));
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.prompt-chip-cmd:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-.prompt-chip-cmd-token {
-  font-family: ui-monospace, Consolas, "SF Mono", monospace;
-  font-size: 0.85em;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-}
-
 /* Compact ghost button for the chat bar, next to Send. */
 .btn-tool {
   display: inline-flex;
@@ -607,8 +574,7 @@ body {
   margin-bottom: 0;
 }
 
-.loading-indicator,
-.scene-prompt-pending {
+.loading-indicator {
   color: var(--muted);
   font-style: italic;
 }
@@ -651,36 +617,6 @@ body {
 }
 .story-thought {
   color: #b9a7e0;
-}
-
-/* [FUNCTIONAL] renderImageMessage() targets these exact names */
-.message.message-image {
-  padding: 4px;
-}
-
-.generated-image {
-  display: block;
-  max-width: 100%;
-  /* A portrait is ~1.5x taller than it is wide, so at full content width it
-     renders taller than the transcript area on a laptop (832x1216 came out
-     ~994px tall in an 800px viewport) and the bottom of the image sits below
-     the fold. Cap the height too. The cap is set from the scroller's measured
-     height by updateGeneratedImageHeight(); the vh value is only the fallback
-     for the first paint. */
-  max-height: var(--generated-image-max-height, 60vh);
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: var(--radius);
-}
-
-.generated-image-missing {
-  padding: 12px;
-  border: 1px dashed var(--stroke);
-  border-radius: var(--radius);
-  color: var(--muted);
-  text-align: center;
-  font-size: 0.85em;
 }
 
 /* Code blocks */
@@ -796,10 +732,6 @@ body {
 }
 .model-dropdown-manual-link:hover {
   color: var(--text);
-}
-
-.image-model-input {
-  width: 100%;
 }
 
 .model-dropdown-item.history-item {
@@ -1763,11 +1695,6 @@ select:focus {
     white-space: nowrap;
   }
 
-  .image-model-pill {
-    padding-left: 6px;
-    margin-left: 1px;
-  }
-
   /* Hide some top-bar text on very narrow screens */
   .btn-eject {
     padding: 4px;
@@ -2164,44 +2091,3 @@ select:focus {
   }
 }
 
-/* ── ComfyUI settings (index.html #comfy-settings) ──────────────
-   ComfyUI takes a node graph instead of prompt+size, so it needs its own
-   workflow/aspect/sampler controls rather than reusing the image-size slider. */
-
-.comfy-workflow-json {
-  min-height: 88px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.72em;
-  line-height: 1.4;
-  white-space: pre;
-  overflow-wrap: normal;
-  overflow-x: auto;
-}
-
-.comfy-workflow-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0 14px;
-}
-
-.settings-btn {
-  background: var(--surface-2, transparent);
-  color: var(--text);
-  border: 1px solid var(--stroke);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78em;
-  cursor: pointer;
-}
-
-.settings-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* The pasted workflow is the override, so keep the textarea visually
-   subordinate to the picker until it actually contains something. */
-.comfy-workflow-json:placeholder-shown {
-  border-style: dashed;
-}

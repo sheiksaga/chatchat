@@ -237,12 +237,6 @@ async function streamAssistantResponse() {
       addMessageToolbar(loadingDiv, newIdx);
       if (currentMode === "story") applyStoryFormatting(loadingDiv);
       announceToSR(fullResponse);
-      // Fold the new turn into the chat's scene record in the background. Not
-      // awaited: it is an extra model call, and the user should not wait for it
-      // to read a reply that has already arrived.
-      if (typeof scheduleSceneStateUpdate === "function") {
-        scheduleSceneStateUpdate();
-      }
       return newIdx;
     }
     // Aborted before any content streamed — drop the empty placeholder
@@ -284,6 +278,15 @@ async function generateResponseForHistory() {
 
 async function sendMessage(text) {
   if (!text) return;
+
+  // The image subsystem is being rebuilt from scratch. Keep the image mode
+  // pill, but make its absence explicit rather than silently sending a chat
+  // reply to an image prompt.
+  if (currentMode === "image") {
+    showToast("Image generation isn't available yet.", "error");
+    return;
+  }
+
   if (!currentChatId) startNewChat();
   registerCurrentChat();
 
@@ -307,27 +310,6 @@ async function sendMessage(text) {
   userDiv.textContent = text;
   messagesEl.appendChild(userDiv);
   messagesEl.scrollTop = messagesEl.scrollHeight;
-
-  // `/image` and `/img` generate a picture instead of a chat reply. The user
-  // turn is already in history above, so the summariser can see the command
-  // in context; images.js filters it back out when building the scene.
-  const imageCmd = parseImageCommand(text);
-  if (imageCmd) {
-    // Not awaited: image generation runs in the background so the user can
-    // keep chatting while it loads (see generateImageMessage in images.js).
-    generateImageMessage(imageCmd.prompt, { raw: imageCmd.raw });
-    document.getElementById("chat-input")?.focus();
-    return;
-  }
-
-  // Image mode: every message is a direct (verbatim) image prompt, no /image
-  // tag needed — mirrors /img rather than /image, since there's no ongoing
-  // chat context to summarise a "scene" from.
-  if (currentMode === "image") {
-    generateImageMessage(text, { raw: true });
-    document.getElementById("chat-input")?.focus();
-    return;
-  }
 
   await generateResponseForHistory();
 
@@ -443,17 +425,6 @@ async function compressHistory() {
       generationStore = newStore;
       generationIdx = newIdx;
       saveGenerations();
-
-      // The transcript just became 3 entries, so every index in the scene
-      // record now refers to the wrong message. Reset it to "unknown" rather
-      // than guess: the next generation folds the summary back in from
-      // scratch, which is cheap and cannot attach the wrong clothes to the
-      // wrong person.
-      if (typeof getSceneState === "function") {
-        const scene = getSceneState();
-        scene.throughIndex = -1;
-        saveSceneState(scene);
-      }
 
       safeSetItem(
         STORAGE_KEY_PREFIX + currentChatId,

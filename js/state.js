@@ -507,10 +507,10 @@ function setChatMeta(meta) {
   safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
 }
 
-/* ── Image generation ─────────────────────────────────────────────
-   Image requests target whichever cloud provider resolveImageProvider()
-   (js/images.js) picks, and always use the OpenAI-compatible request
-   shape (prompt/model/size/n). */
+/* ── Image generation (scaffolding) ───────────────────────────────
+   Defaults kept for the image-subsystem rewrite. The implementation that
+   consumed them (js/images.js) was removed, but the values stay persisted
+   so a new request path can pick them up unchanged. */
 
 const DEFAULT_IMAGE_MODEL = "hidream";
 const DEFAULT_IMAGE_SIZE = "1024x1024";

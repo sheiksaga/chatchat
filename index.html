@@ -249,46 +249,6 @@
             <!-- Model selector dropdown -->
             <div class="model-dropdown" id="model-dropdown"></div>
 
-            <!-- Image model selector (cloud providers with image support) -->
-            <button
-              class="top-pill image-model-pill hidden"
-              id="image-model-selector"
-              onclick="openImageModelSelector()"
-              title="Select image generation model"
-              aria-label="Select image model"
-            >
-              <span class="pill-icon-img"
-                ><svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" /></svg
-              ></span>
-              <span id="current-image-model-name">Image Model</span>
-              <span class="pill-chevron"
-                ><svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="6 9 12 15 18 9" /></svg
-              ></span>
-            </button>
-            <!-- Image model dropdown -->
-            <div class="model-dropdown" id="image-model-dropdown"></div>
           </div>
           <div class="top-bar-right">
             <button
@@ -525,122 +485,6 @@
                     Add provider
                   </button>
                 </div>
-              </div>
-
-              <div class="settings-slider-row">
-                <label for="image-size">Image size</label>
-                <input
-                  type="range"
-                  id="image-size"
-                  min="512"
-                  max="1024"
-                  step="64"
-                  value="1024"
-                />
-                <span class="settings-slider-val" id="image-size-val"
-                  >1024×1024</span
-                >
-              </div>
-
-              <div class="settings-slider-row">
-                <label for="image-steps">Steps (local providers only)</label>
-                <input
-                  type="range"
-                  id="image-steps"
-                  min="1"
-                  max="40"
-                  step="1"
-                  value="4"
-                />
-                <span class="settings-slider-val" id="image-steps-val">4</span>
-              </div>
-
-              <label class="settings-label" for="image-lora-path"
-                >LoRA path (local providers only)</label
-              >
-              <input
-                type="text"
-                class="story-config-input"
-                id="image-lora-path"
-                placeholder="/path/to/lora.safetensors"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <div class="settings-slider-row">
-                <label for="image-lora-scale">LoRA scale</label>
-                <input
-                  type="range"
-                  id="image-lora-scale"
-                  min="0"
-                  max="1.5"
-                  step="0.05"
-                  value="1"
-                />
-                <span class="settings-slider-val" id="image-lora-scale-val"
-                  >1.00</span
-                >
-              </div>
-
-              <!-- ComfyUI only: it takes a node graph, not prompt+size, so it
-                   needs its own workflow/aspect/sampler controls. Hidden
-                   unless ComfyUI is the selected image provider. -->
-              <div id="comfy-settings" class="hidden">
-                <label class="settings-label" for="comfy-workflow">
-                  ComfyUI workflow
-                </label>
-                <select class="story-config-input" id="comfy-workflow"></select>
-                <p class="settings-hint" id="comfy-workflow-hint"></p>
-
-                <label class="settings-label" for="comfy-workflow-json">
-                  Paste a workflow (overrides the one above)
-                </label>
-                <textarea
-                  class="settings-textarea comfy-workflow-json"
-                  id="comfy-workflow-json"
-                  placeholder="Paste a workflow exported with Workflow &rarr; Export (API). Leave empty to use the workflow selected above."
-                  spellcheck="false"
-                ></textarea>
-                <div class="comfy-workflow-actions">
-                  <button
-                    type="button"
-                    class="settings-btn"
-                    id="comfy-workflow-clear"
-                  >
-                    Clear pasted workflow
-                  </button>
-                  <span class="settings-hint" id="comfy-workflow-status"></span>
-                </div>
-
-                <label class="settings-label" for="comfy-aspect">Aspect</label>
-                <select class="story-config-input" id="comfy-aspect">
-                  <option value="PORTRAIT">Portrait — 832 x 1216</option>
-                  <option value="SQUARE">Square — 1024 x 1024</option>
-                  <option value="LANDSCAPE">Landscape — 1216 x 832</option>
-                  <option value="CINEMA">Cinema — 1536 x 640</option>
-                </select>
-
-                <div class="settings-slider-row">
-                  <label for="comfy-cfg">CFG scale</label>
-                  <input
-                    type="range"
-                    id="comfy-cfg"
-                    min="1"
-                    max="8"
-                    step="0.5"
-                    value="1"
-                  />
-                  <span class="settings-slider-val" id="comfy-cfg-val">1.0</span>
-                </div>
-
-                <label class="settings-label" for="comfy-negative-prompt">
-                  Negative prompt
-                </label>
-                <textarea
-                  class="settings-textarea"
-                  id="comfy-negative-prompt"
-                  placeholder="bad quality, worst quality, lowres, blurry..."
-                  spellcheck="false"
-                ></textarea>
               </div>
 
               <label class="settings-label" for="system-prompt"
@@ -1111,36 +955,6 @@
 
           <div class="gen-stats hidden" id="hero-gen-stats" aria-live="polite"></div>
 
-          <!-- Image command affordance. Its own row rather than part of
-               #prompt-chips, because /image works in every mode while the
-               starter prompts only make sense in chat mode. -->
-          <div class="prompt-chips" id="prompt-chips-image">
-            <button
-              class="prompt-chip prompt-chip-cmd"
-              id="hero-image-chip"
-              onclick="insertImageCommand('hero-input-text')"
-              title="Generate an illustration of the current scene — puts /image in the box"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-              Illustrate the scene
-              <code class="prompt-chip-cmd-token">/image</code>
-            </button>
-          </div>
-
           <div class="hero-input-wrapper">
             <div class="hero-input" id="hero-input-box">
               <textarea
@@ -1187,29 +1001,6 @@
             <textarea id="chat-input" placeholder="Message" rows="1"></textarea>
           </div>
           <div class="chat-input-actions">
-            <button
-              class="btn-tool"
-              id="chat-image-btn"
-              onclick="insertImageCommand('chat-input')"
-              title="Generate an illustration of the current scene — puts /image in the box"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-              Illustrate
-            </button>
             <button
               class="btn-send"
               id="chat-send-btn"
@@ -1335,7 +1126,7 @@
               <summary>Advanced</summary>
 
               <label class="ce-label" for="ce-appearance"
-                >Appearance <span class="ce-hint">drives /image consistency</span></label
+                >Appearance</label
               >
               <textarea
                 class="story-first-prompt ce-short"
@@ -1385,18 +1176,12 @@
     <script src="cards/cards.js"></script>
     <script src="js/dom.js"></script>
     <script src="js/cards.js"></script>
-    <script src="js/scenestate.js"></script>
-    <script src="js/imagestore.js"></script>
     <script src="js/view.js"></script>
     <script src="js/api.js"></script>
     <script src="js/models.js"></script>
-    <script src="js/imageprofile.js"></script>
     <script src="js/config.js"></script>
     <script src="js/help.js"></script>
     <script src="js/chatlist.js"></script>
-    <script src="js/scene-prompt.js"></script>
-    <script src="js/comfy.js"></script>
-    <script src="js/images.js"></script>
     <script src="js/rp.js"></script>
     <script src="js/messages.js"></script>
     <script src="js/cardeditor.js"></script>

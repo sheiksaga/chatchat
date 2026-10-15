@@ -21,12 +21,9 @@ const DOM = {
   /* Top bar */
   modelSelector: "model-selector",
   currentModelName: "current-model-name",
-  imageModelSelector: "image-model-selector",
-  currentImageModelName: "current-image-model-name",
   btnEject: "btn-eject",
   configBtn: "config-btn",
   modelDropdown: "model-dropdown",
-  imageModelDropdown: "image-model-dropdown",
   configPanel: "config-panel",
 
   /* Config panel */
@@ -54,17 +51,6 @@ const DOM = {
   prefFontVal: "pref-font-val",
   prefReset: "pref-reset",
   compressBtn: "compress-btn",
-
-  /* Image settings */
-  imageSize: "image-size",
-  imageNegativePrompt: "image-negative-prompt",
-  imageSteps: "image-steps",
-  imageGuidance: "image-guidance",
-  imageExplicit: "image-explicit",
-  imageStyle: "image-style",
-  imageResetCast: "image-reset-cast",
-  imageLoraPath: "image-lora-path",
-  imageLoraScale: "image-lora-scale",
 
   /* System prompt + story config */
   systemPrompt: "system-prompt",

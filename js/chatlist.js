@@ -210,10 +210,6 @@ function deleteChat(chatId) {
     wasCurrent: chatId === currentChatId,
     history: localStorage.getItem(STORAGE_KEY_PREFIX + chatId),
     generations: localStorage.getItem(GENERATIONS_PREFIX + chatId),
-    // The scene record is part of the chat, so undo has to restore it too —
-    // otherwise an undone delete comes back with every character's clothing
-    // and the location forgotten.
-    scene: localStorage.getItem(SCENE_KEY_PREFIX + chatId),
     meta: meta[chatId] ? JSON.parse(JSON.stringify(meta[chatId])) : null,
   };
 
@@ -221,7 +217,6 @@ function deleteChat(chatId) {
   safeSetItem("chat_index", JSON.stringify(chats));
   localStorage.removeItem(STORAGE_KEY_PREFIX + chatId);
   localStorage.removeItem(GENERATIONS_PREFIX + chatId);
-  deleteSceneState(chatId);
 
   // Clean up chat meta
   delete meta[chatId];
@@ -295,7 +290,6 @@ function restoreDeletedChat(snap) {
     safeSetItem(STORAGE_KEY_PREFIX + snap.chatId, snap.history);
   if (snap.generations != null)
     safeSetItem(GENERATIONS_PREFIX + snap.chatId, snap.generations);
-  if (snap.scene != null) safeSetItem(SCENE_KEY_PREFIX + snap.chatId, snap.scene);
   if (snap.meta) {
     const meta = safeGetJSON(CHAT_META_KEY, {});
     meta[snap.chatId] = snap.meta;
@@ -354,7 +348,6 @@ function deleteAllChats() {
       chats.forEach((id) => {
         localStorage.removeItem(STORAGE_KEY_PREFIX + id);
         localStorage.removeItem(GENERATIONS_PREFIX + id);
-        deleteSceneState(id);
       });
       safeSetItem("chat_index", "[]");
       localStorage.removeItem(CHAT_META_KEY);

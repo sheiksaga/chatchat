@@ -2,9 +2,6 @@
    help.js — Setup guide modal (local models, LAN, cloud providers)
    ══════════════════════════════════════════════════════════════ */
 
-/** The command that starts the local MLX Omni image server, CORS-enabled for the browser. */
-const MLX_OMNI_START_COMMAND = 'mlx-omni-server --port 10240 --cors-allow-origins="*"';
-
 /** Static, trusted HTML — never interpolates user data, so plain innerHTML is safe here. */
 const HELP_CONTENT_HTML = `
   <div class="help-section">
@@ -86,112 +83,6 @@ const HELP_CONTENT_HTML = `
   </div>
 
   <div class="help-section">
-    <h3>Local image generation — ComfyUI</h3>
-    <p>
-      <a href="https://www.comfy.org" target="_blank" rel="noopener">ComfyUI</a>
-      is the most flexible local option and the one chatchat gives the most
-      control over. Its default port is <code>8188</code>, which is what the
-      <strong>ComfyUI</strong> image provider already points at.
-    </p>
-    <p>
-      Start it with the cross-origin header enabled from the command line:
-    </p>
-    <pre>python main.py --enable-cors-header</pre>
-    <p>
-      Then in chatchat: <strong>Configuration → Image Provider → ComfyUI</strong>,
-      and pick a checkpoint from the Image Model dropdown — that list is read
-      straight from ComfyUI, so it always matches what you actually have.
-    </p>
-    <p><strong>Workflows.</strong> chatchat ships one bundled workflow and a
-      box to paste your own. Anything you have already built in ComfyUI will
-      work if you export it with <code>Workflow → Export (API)</code> — that is
-      the node-graph format, and it is easy to grab the other export by mistake
-      (chatchat will say so if you do).</p>
-    <p>
-      Placeholders are substituted per image using the same convention
-      SillyTavern uses, so a workflow already tuned there works unmodified:
-      <code>%prompt%</code>, <code>%negative_prompt%</code>,
-      <code>%model%</code>, <code>%width%</code>, <code>%height%</code>,
-      <code>%seed%</code>, <code>%steps%</code>, <code>%scale%</code>,
-      <code>%sampler%</code> and <code>%scheduler%</code>. Workflows from the
-      ComfyInject extension (which spells them <code>{{POSITIVE_PROMPT}}</code>,
-      <code>{{CHECKPOINT}}</code> and so on) are understood too.
-    </p>
-    <p>
-      <strong>The seed is locked per chat.</strong> A chat reuses one seed for
-      every image it generates, so a character keeps the same face and build
-      across scenes instead of being rerolled each time. A new chat starts a
-      new seed; there is a reroll next to the image settings if you want a
-      different look for the same chat.
-    </p>
-    <p>
-      <strong>Scene memory.</strong> In a chat with a cast, the chat model keeps
-      a small record of the current scene beside the chat: where it is, who is
-      present, and what each character is wearing and doing right now. That is
-      what stops a character being redressed from scratch every image — if
-      someone took a jacket off three messages ago, the record knows, and the
-      next picture does not put it back on. It updates itself after each reply,
-      and again before every image. Delete the chat and the record goes with it.
-    </p>
-    <p>
-      <strong>Aspect</strong> sets the canvas, and for a character portrait
-      <code>Portrait 832 x 1216</code> is the shape to use — the checkpoints
-      chatchat targets are trained around that size, and it is why the default
-      is not square.
-    </p>
-    <p>
-      For the WAI-illustrious family, <strong>CFG 1.0</strong> with
-      <strong>6-10 steps</strong> and the <code>euler_ancestral</code> sampler
-      is the intended fast configuration; raising CFG much above 2 on those
-      checkpoints tends to burn the image rather than improve it.
-    </p>
-    <p class="help-warn">
-      A workflow that loads a LoRA only present on your machine will fail
-      everywhere else, and chatchat deliberately does not bundle those. Paste
-      yours in and it will work.
-    </p>
-  </div>
-
-  <div class="help-section">
-    <h3>Local image generation — Mac (Apple Silicon)</h3>
-    <p>
-      The fastest local option is <strong>FLUX.1 schnell</strong> via an
-      OpenAI-compatible MLX server, since chatchat's image pipeline expects
-      that exact API shape.
-    </p>
-    <ol>
-      <li>Install: <code>pip install mlx-omni-server</code></li>
-      <li>Run it with CORS enabled so the browser can reach it:<br>
-        <code>${MLX_OMNI_START_COMMAND}</code>
-      </li>
-      <li>In chatchat, pick <strong>Local image (MLX Omni)</strong> under Image Provider — it points at <code>http://localhost:10240/v1</code> by default.</li>
-      <li>Set the image model to <code>dhairyashil/FLUX.1-schnell-mflux-4bit</code> (or another MLX FLUX checkpoint) via the image-model pill in the top bar.</li>
-    </ol>
-    <p class="settings-hint">
-      Prefer a GUI? <a href="https://drawthings.ai" target="_blank" rel="noopener">Draw Things</a>
-      is also fast on Apple Silicon, but its API
-      (<code>/sdapi/v1/txt2img</code>) isn't OpenAI-compatible, so it can't be
-      wired in as a provider here without a translation layer.
-    </p>
-  </div>
-
-  <div class="help-section">
-    <h3>Local image generation — Windows</h3>
-    <p>
-      MLX is Apple-Silicon-only, so there's no direct equivalent on Windows.
-      Two practical options:
-    </p>
-    <ul>
-      <li>Run a cloud image provider instead (see below) — no local GPU setup needed.</li>
-      <li>
-        Run <a href="https://github.com/AUTOMATIC1111/stable-diffusion-webui" target="_blank" rel="noopener">Automatic1111</a>
-        or <a href="https://github.com/comfyanonymous/ComfyUI" target="_blank" rel="noopener">ComfyUI</a>
-        behind an OpenAI-compatible shim (several small open-source proxies exist) — more setup, but keeps generation fully local.
-      </li>
-    </ul>
-  </div>
-
-  <div class="help-section">
     <h3>Using a local model over your home WiFi</h3>
     <p>
       Any local provider (LM Studio or an image server) can be shared with
@@ -227,7 +118,6 @@ function openHelp() {
   // Close panels that would otherwise sit behind/overlap the modal.
   document.getElementById("config-panel")?.classList.remove("open");
   document.getElementById("model-dropdown")?.classList.remove("open");
-  document.getElementById("image-model-dropdown")?.classList.remove("open");
 
   const overlay = document.createElement("div");
   overlay.className = "story-settings-overlay";
