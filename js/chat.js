@@ -90,11 +90,29 @@ const STORY_STYLES = {
       return parts.concat(storyConfigLines(cfg)).join("\n");
     },
   },
+  character: {
+    label: "Character",
+    hero: "Say or do something…",
+    /**
+     * Character mode normally bypasses this: streamAssistantResponse() calls
+     * buildRPMessages() (js/rp.js) with the real transcript. This is the
+     * fallback for the style being selected with nobody cast yet.
+     */
+    buildPrompt: function (cfg) {
+      var cast = getCast();
+      if (cast.length) return buildRPMessages(cast, cfg, [])[0].content;
+      return [
+        "You are a skilled roleplay partner.",
+        "No character card is selected yet — ask the user which character they want to play.",
+        STORY_FORMATTING_LINE,
+      ].join("\n");
+    },
+  },
 };
 
 /**
  * Resolve the active, valid story style id (defaults to 'cyoa').
- * @returns {'cyoa'|'roleplay'|'gm'}
+ * @returns {'cyoa'|'roleplay'|'gm'|'character'}
  */
 function currentStyle() {
   return storyConfig && STORY_STYLES[storyConfig.style]
@@ -119,6 +137,33 @@ function buildStoryPrompt() {
 }
 
 /**
+ * Open a character chat with the card's greeting already in place.
+ *
+ * Two things fall out of doing it this way rather than as a first user
+ * turn: the scene exists before the player types anything (which is how
+ * SillyTavern feels), and seeding every greeting into generationStore
+ * means the app's existing swipe cycler already covers
+ * `alternate_greetings` with no new machinery.
+ *
+ * @param {object} card
+ * @returns {boolean} true when a greeting was written
+ */
+function seedGreeting(card) {
+  if (!card || chatHistory.length > 0 || !currentChatId) return false;
+  const greetings = cardGreetings(card);
+  if (!greetings.length) return false;
+
+  chatHistory = [{ role: "assistant", content: greetings[0], name: card.name }];
+  generationStore = { 0: greetings.slice() };
+  generationIdx = { 0: 0 };
+  saveGenerations();
+  safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+  // The chat now has content, so it must become reachable from the sidebar.
+  registerCurrentChat();
+  return true;
+}
+
+/**
  * Shared helper: stream an assistant response for the current chatHistory.
  * Returns the index of the new assistant message, or -1 on error.
  * @returns {Promise<number>}
@@ -126,9 +171,21 @@ function buildStoryPrompt() {
 async function streamAssistantResponse() {
   const messagesEl = document.getElementById("messages");
   const systemPrompt = document.getElementById("system-prompt").value.trim();
+  const cast = currentMode === "story" ? getCast() : [];
 
   const loadingDiv = document.createElement("div");
   loadingDiv.className = "message assistant loading-indicator";
+  // In character mode the reply belongs to a named speaker, so build the same
+  // header + body shape renderMessages() produces and stream into the body.
+  // Otherwise a streamed reply renders as a bare paragraph and only gains its
+  // avatar and speaker name after something forces a full re-render.
+  let renderEl = loadingDiv;
+  if (cast.length) {
+    loadingDiv.appendChild(characterHeader(cast[0].name));
+    renderEl = document.createElement("div");
+    renderEl.className = "message-body";
+    loadingDiv.appendChild(renderEl);
+  }
   messagesEl.appendChild(loadingDiv);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -143,7 +200,14 @@ async function streamAssistantResponse() {
 
   try {
     let messages;
-    if (currentMode === "story") {
+    let stop;
+
+    if (cast.length) {
+      // Character mode: card-shaped prompt, speaker-prefixed transcript, and
+      // stop strings so the model cannot write the user's half of the scene.
+      messages = buildRPMessages(cast, storyConfig, chatHistory);
+      stop = rpStopStrings(cast, storyConfig.userName);
+    } else if (currentMode === "story") {
       messages = [
         { role: "system", content: buildStoryPrompt() },
         ...chatHistory,
@@ -154,15 +218,31 @@ async function streamAssistantResponse() {
       messages = chatHistory;
     }
 
-    const fullResponse = await streamResponse(messages, loadingDiv);
-    if (fullResponse) {
+    const rawResponse = await streamResponse(messages, loadingDiv, {
+      stop,
+      renderEl,
+    });
+    if (rawResponse) {
       // Includes the case where the user stopped mid-stream — keep the partial text
-      chatHistory.push({ role: "assistant", content: fullResponse });
+      const fullResponse = cast.length
+        ? stripLeadingSpeaker(rawResponse, cast, storyConfig.userName) || rawResponse
+        : rawResponse;
+      const assistantMsg = { role: "assistant", content: fullResponse };
+      // Tagging the speaker is what lets renderMessages() attach the right
+      // avatar, and what keeps group scenes attributable in the transcript.
+      if (cast.length) assistantMsg.name = cast[0].name;
+      chatHistory.push(assistantMsg);
       const newIdx = chatHistory.length - 1;
       loadingDiv.classList.remove("loading-indicator");
       addMessageToolbar(loadingDiv, newIdx);
       if (currentMode === "story") applyStoryFormatting(loadingDiv);
       announceToSR(fullResponse);
+      // Fold the new turn into the chat's scene record in the background. Not
+      // awaited: it is an extra model call, and the user should not wait for it
+      // to read a reply that has already arrived.
+      if (typeof scheduleSceneStateUpdate === "function") {
+        scheduleSceneStateUpdate();
+      }
       return newIdx;
     }
     // Aborted before any content streamed — drop the empty placeholder
@@ -170,9 +250,14 @@ async function streamAssistantResponse() {
     return -1;
   } catch (err) {
     console.error("Generation error:", err);
-    loadingDiv.textContent = `Error: ${err.message}`;
+    // A network failure already reads as a complete sentence naming the host
+    // and both possible causes; prefixing it would only bury the useful part.
+    const detail = err.networkUnreachable
+      ? err.message
+      : `Generation failed: ${err.message}`;
+    loadingDiv.textContent = err.networkUnreachable ? detail : `Error: ${detail}`;
     loadingDiv.classList.remove("loading-indicator");
-    showToast(`Generation failed: ${err.message}`, "error");
+    showToast(detail, "error");
     addRetryButton(loadingDiv, () => streamAssistantResponse());
     return -1;
   } finally {
@@ -200,18 +285,7 @@ async function generateResponseForHistory() {
 async function sendMessage(text) {
   if (!text) return;
   if (!currentChatId) startNewChat();
-
-  // Ensure current chat ID is registered in the chat index in localStorage
-  const chats = safeGetJSON("chat_index", []);
-  if (!chats.includes(currentChatId)) {
-    chats.push(currentChatId);
-    safeSetItem("chat_index", JSON.stringify(chats));
-    // Ensure metadata exists for newly registered chats
-    const meta = safeGetJSON(CHAT_META_KEY, {});
-    if (!meta[currentChatId])
-      meta[currentChatId] = { createdAt: Date.now(), lastMode: currentMode };
-    safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
-  }
+  registerCurrentChat();
 
   showChatView();
   var ta = document.getElementById("hero-input-text");
@@ -239,7 +313,9 @@ async function sendMessage(text) {
   // in context; images.js filters it back out when building the scene.
   const imageCmd = parseImageCommand(text);
   if (imageCmd) {
-    await generateImageMessage(imageCmd.prompt, { raw: imageCmd.raw });
+    // Not awaited: image generation runs in the background so the user can
+    // keep chatting while it loads (see generateImageMessage in images.js).
+    generateImageMessage(imageCmd.prompt, { raw: imageCmd.raw });
     document.getElementById("chat-input")?.focus();
     return;
   }
@@ -248,7 +324,7 @@ async function sendMessage(text) {
   // tag needed — mirrors /img rather than /image, since there's no ongoing
   // chat context to summarise a "scene" from.
   if (currentMode === "image") {
-    await generateImageMessage(text, { raw: true });
+    generateImageMessage(text, { raw: true });
     document.getElementById("chat-input")?.focus();
     return;
   }
@@ -315,7 +391,7 @@ async function compressHistory() {
     const msgs = chatHistory.slice(0, -1);
     msgs.push({ role: "user", content: summaryPrompt });
 
-    const response = await fetch(`${API_BASE}/chat/completions`, {
+    const response = await fetchApi(`${API_BASE}/chat/completions`, {
       method: "POST",
       headers: apiHeaders(),
       body: JSON.stringify({
@@ -367,6 +443,17 @@ async function compressHistory() {
       generationStore = newStore;
       generationIdx = newIdx;
       saveGenerations();
+
+      // The transcript just became 3 entries, so every index in the scene
+      // record now refers to the wrong message. Reset it to "unknown" rather
+      // than guess: the next generation folds the summary back in from
+      // scratch, which is cheap and cannot attach the wrong clothes to the
+      // wrong person.
+      if (typeof getSceneState === "function") {
+        const scene = getSceneState();
+        scene.throughIndex = -1;
+        saveSceneState(scene);
+      }
 
       safeSetItem(
         STORAGE_KEY_PREFIX + currentChatId,

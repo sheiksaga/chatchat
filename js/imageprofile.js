@@ -80,6 +80,11 @@ async function discoverCharacters(signal, onStatus) {
   (storyConfig.characters || []).forEach((c) => {
     if (c && c.name) addCharacterLock(profile, c.name, c.traits || "");
   });
+  // A cast card states its own appearance, so it beats both the manual rows
+  // and anything the model would invent from the transcript.
+  if (typeof getCast === "function") {
+    getCast().forEach((c) => addCharacterLock(profile, c.name, c.appearance || ""));
+  }
 
   const context = chatHistory
     .filter((m) => !m.image)
@@ -122,9 +127,38 @@ async function discoverCharacters(signal, onStatus) {
     }
   }
 
-  profile.discovered = true;
+  // A pass that locked nobody must not be treated as final. It happens for a
+  // real reason — the model answered in the wrong format, or the cast was not
+  // configured yet — and marking it done would mean that chat never got its
+  // character locks for the rest of its life. Only conclude the search when it
+  // found someone, or when there was no cast to find.
+  const hasCast = typeof getCast === "function" && getCast().length > 0;
+  if (Object.keys(profile.characters).length > 0 || !hasCast) {
+    profile.discovered = true;
+  }
   saveImageProfile(profile);
   return profile;
+}
+/**
+ * Lock a character card's appearance into this chat's image profile.
+ *
+ * Deliberately not routed through addCharacterLock(): that one guards
+ * against the *discovery* path inventing a name out of prose, and rejects
+ * anything long or multi-word. A card name is authored, so those guards
+ * are simply wrong here.
+ *
+ * Skipped when the card yielded no appearance phrases, and never applied
+ * over a hand-tuned lock unless the card itself carries an appearance.
+ * @param {object} card
+ */
+function lockAppearanceForCard(card) {
+  if (!card || !card.name || !card.appearance) return;
+  const look = sanitiseScenePrompt(card.appearance);
+  if (!look) return;
+  const profile = getImageProfile();
+  const key = card.name.trim().toLowerCase();
+  profile.characters[key] = { name: card.name.trim(), appearance: look };
+  saveImageProfile(profile);
 }
 
 /**
@@ -154,21 +188,55 @@ function addCharacterLock(profile, name, appearance) {
 }
 
 /**
+ * Words of body description kept per character when building a prompt, and the
+ * same for their clothing and state.
+ *
+ * These exist because the text encoder is small. SDXL's CLIP takes 77 tokens
+ * per chunk across two chunks, so roughly 118 words total, and anything past
+ * that is silently dropped — measured on a real three-character scene, the
+ * prompt came to 308 tokens against a 154-token budget, so half of it never
+ * reached the model. Character locks come from a card's own prose and can
+ * easily run long, and they are injected once per character, so without a cap a
+ * crowd pushes the actual action out of the prompt.
+ *
+ * Leading words are kept: the cards describe build, hair and eyes first, which
+ * are the identifying features worth spending the budget on.
+ */
+const PROMPT_LOCK_WORDS = 16;
+const PROMPT_DETAIL_WORDS = 12;
+
+/** Keep at most `max` words, dropping any dangling separator. */
+function trimWords(text, max) {
+  const words = String(text || "").trim().split(/\s+/);
+  if (words.length <= max) return String(text || "").trim();
+  return words.slice(0, max).join(" ").replace(/[,;:]$/, "");
+}
+
+/**
  * Build the prompt actually sent to the image model.
  *
  * Character names mean nothing to a diffusion model, so each known name is
  * swapped for its locked appearance — that substitution is what makes the
  * same person recognisable across separate generations. The style suffix
  * goes last so it never displaces scene detail.
+ *
+ * The scene record fills the gap the locks deliberately leave open. A lock is
+ * body-only (see discoverCharacters) because a fixed outfit would fight the
+ * scene's state of dress, so what each character is wearing *now* and the
+ * location they are standing in come from scenestate.js and are folded into
+ * the same parenthetical. Nothing here is load-bearing: with no record, the
+ * prompt is exactly what it was before.
  * @param {string} basePrompt
+ * @param {object} [sceneState]
  * @returns {string}
  */
-function composeImagePrompt(basePrompt) {
+function composeImagePrompt(basePrompt, sceneState) {
   const profile = getImageProfile();
   let out = basePrompt;
 
   for (const key in profile.characters) {
     const lock = profile.characters[key];
+    const scene = trimWords(sceneDetailFor(sceneState, lock.name), PROMPT_DETAIL_WORDS);
     // Word-boundary match so "Jess" doesn't fire inside "Jessica".
     const re = new RegExp(`\\b${escapeRegExp(lock.name)}(?:'s)?\\b`, "gi");
     let first = true;
@@ -177,10 +245,44 @@ function composeImagePrompt(basePrompt) {
       // get a short handle so a crowded scene doesn't blow the token budget.
       if (first) {
         first = false;
-        return `${lock.name} (${lock.appearance})`;
+        const full = [trimWords(lock.appearance, PROMPT_LOCK_WORDS), scene]
+          .filter(Boolean)
+          .join(", ");
+        return `${lock.name} (${full})`;
       }
       return lock.name;
     });
+  }
+
+  // A character the scene record knows about but that has no body lock would
+  // otherwise lose its clothing and state entirely: the record would be
+  // tracked turn after turn and then silently ignored at the one moment it
+  // mattered. Substitute whatever the scene does know.
+  if (sceneState && sceneState.characters) {
+    for (const key of Object.keys(sceneState.characters)) {
+      const entry = sceneState.characters[key];
+      if (profile.characters[String(entry.name).toLowerCase()]) continue;
+      const detail = trimWords(
+        sceneDetailFor(sceneState, entry.name),
+        PROMPT_DETAIL_WORDS,
+      );
+      if (!detail) continue;
+      const re = new RegExp(`\\b${escapeRegExp(entry.name)}(?:'s)?\\b`, "gi");
+      let first = true;
+      out = out.replace(re, () => {
+        if (first) {
+          first = false;
+          return `${entry.name} (${detail})`;
+        }
+        return entry.name;
+      });
+    }
+  }
+
+  // The location is not attached to any one character, so it trails the scene
+  // description ahead of the style suffix.
+  if (sceneState && sceneState.scene) {
+    out = `${out}, ${sceneState.scene}`;
   }
 
   const style = (profile.style || "").trim();
@@ -205,12 +307,13 @@ function escapeRegExp(s) {
  * @param {string} basePrompt
  * @param {AbortSignal} [signal]
  * @param {(s:string)=>void} [onStatus]
+ * @param {object} [sceneState] The chat's scene record, if one was tracked
  * @returns {Promise<{prompt:string, seed:number}>}
  */
-async function applyImageProfile(basePrompt, signal, onStatus) {
+async function applyImageProfile(basePrompt, signal, onStatus, sceneState) {
   await discoverCharacters(signal, onStatus);
   return {
-    prompt: composeImagePrompt(basePrompt),
+    prompt: composeImagePrompt(basePrompt, sceneState),
     seed: getImageProfile().seed,
   };
 }

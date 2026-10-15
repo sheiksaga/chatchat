@@ -16,6 +16,27 @@ const API_PROVIDERS = {
     isLocal: true,
     chat: true,
     images: false,
+    // LM Studio owns the model lifecycle: POST /v1/models/load and /unload.
+    loadLifecycle: true,
+  },
+  llama_cpp: {
+    label: "llama.cpp (local)",
+    baseUrl: "http://localhost:8081/v1",
+    isLocal: true,
+    chat: true,
+    images: false,
+    // llama.cpp has no load/unload endpoints at all — a request naming a model
+    // *is* the load. The router (--models-dir) spawns a child server on the
+    // first request for that model and proxies to it, which takes ~10-30s, and
+    // evicts the previous one when --models-max 1. Verified against the
+    // shipped llama-server-impl.dll: zero `models/load` / `models/unload`
+    // route strings exist.
+    loadLifecycle: false,
+    // Per-model sampler defaults live on the server (--models-preset), not in
+    // a Hugging Face README, and are readable from GET /props as
+    // `default_generation_settings`. Reading them is what stops the request
+    // body from silently clobbering the tuned per-model temp/min-p.
+    samplerSource: "props",
   },
   local_image: {
     label: "Local image (MLX Omni)",
@@ -23,6 +44,21 @@ const API_PROVIDERS = {
     isLocal: true,
     chat: false,
     images: true,
+  },
+  comfyui: {
+    label: "ComfyUI (local)",
+    // Note: no /v1 — ComfyUI serves its own API at the root.
+    baseUrl: "http://localhost:8188",
+    isLocal: true,
+    chat: false,
+    images: true,
+    // ComfyUI has no OpenAI-style image endpoint at all. A request is a node
+    // graph posted to /prompt, and the result is collected from /history +
+    // /view — so this provider needs its own transport (js/comfy.js) rather
+    // than the shared /images/generations call.
+    api: "comfyui",
+    // No model to load or evict; the graph names its own checkpoint.
+    loadLifecycle: false,
   },
   nanogpt: {
     label: "NanoGPT",
@@ -109,6 +145,18 @@ function removeCustomProvider(id) {
 let activeProviderId = localStorage.getItem("active_provider") || "local";
 
 /** Resolve a provider's effective config (default baseUrl + any saved key/override). */
+/**
+ * Resolve a provider id to a usable config, layering any saved overrides
+ * (a custom baseUrl or key) over the built-in registry entry.
+ *
+ * This projects explicitly rather than spreading the registry entry, which is
+ * deliberate — saved values must not be able to override behaviour flags. The
+ * cost is that a *new* flag added to `API_PROVIDERS` is silently dropped until
+ * it is listed here, and dropping one does not fail loudly: it just stops
+ * guarding whatever it guarded. Add new flags in both places.
+ * @param {string} id
+ * @returns {object}
+ */
 function getProviderConfig(id) {
   if (API_PROVIDERS[id]) {
     const base = API_PROVIDERS[id];
@@ -121,6 +169,13 @@ function getProviderConfig(id) {
       images: !!base.images,
       baseUrl: saved.baseUrl || base.baseUrl,
       key: saved.key || "",
+      // Behaviour flags, owned by the registry and not user-editable.
+      // Absent means "has a lifecycle", which is the LM Studio default.
+      loadLifecycle: base.loadLifecycle !== false,
+      samplerSource: base.samplerSource,
+      // Which request shape this provider speaks. Omitted means the
+      // OpenAI-compatible default.
+      api: base.api,
     };
   }
   const custom = getCustomProviders().find((p) => p.id === id);
@@ -133,6 +188,11 @@ function getProviderConfig(id) {
       images: !!custom.images,
       baseUrl: custom.baseUrl,
       key: custom.key || "",
+      // A user-added server is not known to be lifecycle-free, so it keeps the
+      // load/unload behaviour rather than silently losing it.
+      loadLifecycle: true,
+      samplerSource: undefined,
+      api: undefined,
     };
   }
   return getProviderConfig("local");
@@ -263,6 +323,23 @@ function migrateData() {
       changed = true;
     }
   }
+  // Backfill the character-cast fields on configs that predate them.
+  for (const chatId in meta) {
+    const sc = meta[chatId]?.storyConfig;
+    if (!sc || typeof sc !== "object") continue;
+    if (!Array.isArray(sc.castIds)) {
+      sc.castIds = [];
+      changed = true;
+    }
+    if (typeof sc.userName !== "string") {
+      sc.userName = "";
+      changed = true;
+    }
+    if (typeof sc.userPersona !== "string") {
+      sc.userPersona = "";
+      changed = true;
+    }
+  }
   if (changed) {
     safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
   }
@@ -289,22 +366,69 @@ const RP_MODELS = {
 
 /** @type {'chat'|'story'|'image'} */
 let currentMode = "chat";
-/** @type {{style:('cyoa'|'roleplay'|'gm'), narration:('first'|'third'), scene:string, characters:Array<{name:string, traits:string, role:string}>, tags:string, firstPrompt:string}} */
-let storyConfig = {
-  style: "cyoa",
-  narration: "first",
-  scene: "",
-  characters: [],
-  tags: "",
-  firstPrompt: "",
-};
+
+/**
+ * @typedef {object} StoryConfig
+ * @property {'cyoa'|'roleplay'|'gm'|'character'} style
+ * @property {'first'|'third'} narration
+ * @property {string} scene
+ * @property {Array<{name:string, traits:string, role:string}>} characters
+ * @property {string} tags
+ * @property {string} firstPrompt
+ * @property {string[]} castIds   Character-card ids, lead first (see cards.js)
+ * @property {string} userName    The player's name, for {{user}} and stop strings
+ * @property {string} userPersona The player's own description (ST's "persona")
+ */
+
+/**
+ * A fresh story config. Every path that needs a default goes through here —
+ * hand-rolled literals drift and silently drop newly added fields.
+ * @returns {StoryConfig}
+ */
+function defaultStoryConfig() {
+  return {
+    style: "cyoa",
+    narration: "first",
+    scene: "",
+    characters: [],
+    tags: "",
+    firstPrompt: "",
+    castIds: [],
+    userName: "",
+    userPersona: "",
+  };
+}
+
+/** @type {StoryConfig} */
+let storyConfig = defaultStoryConfig();
 
 const apiParams = {
   temperature: 0.7,
   repetitionPenalty: 1.1,
-  topP: undefined, // set from RP model profiles when available
+  // topP/topK/minP have no slider UI. They come from the model's sampler
+  // source (a Hugging Face README, or llama.cpp's /props) and are carried
+  // straight into the request. `min-p` matters for the local RP models, whose
+  // presets are tuned around it.
+  topP: undefined,
   topK: undefined,
+  minP: undefined,
 };
+
+/**
+ * The server root for a provider — `baseUrl` without its trailing API version
+ * segment.
+ *
+ * llama.cpp serves its non-OpenAI endpoints at the root (`/props`, `/slots`,
+ * `/metrics`), not under `/v1`, so the OpenAI base URL cannot be reused
+ * verbatim to reach them.
+ * @param {{baseUrl?: string}} provider
+ * @returns {string}
+ */
+function providerRoot(provider) {
+  return String((provider && provider.baseUrl) || "")
+    .replace(/\/+$/, "")
+    .replace(/\/v\d+$/, "");
+}
 
 /* ── Safe localStorage access ─────────────────────────────────────
    Every read/write goes through these two helpers. Raw setItem throws

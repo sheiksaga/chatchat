@@ -62,6 +62,9 @@ function renderModelDropdownList(dropdown, ids, selectedId, onSelect) {
       item.type = "button";
       item.className = "model-dropdown-item";
       item.setAttribute("role", "option");
+      // Stable handle for tests and for anything that must target a model
+      // whose id contains dots, slashes, or spaces.
+      item.dataset.modelId = id;
       item.textContent = id;
       if (id === selectedId) {
         item.classList.add("active");
@@ -130,7 +133,7 @@ async function openModelSelector() {
   dropdown.classList.add("open");
 
   try {
-    const response = await fetch(`${API_BASE}/models`, {
+    const response = await fetchApi(`${API_BASE}/models`, {
       headers: apiHeaders(),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -163,7 +166,7 @@ async function openModelSelector() {
       selectModel,
     );
   } catch (err) {
-    dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Error: ${err.message}</div>`;
+    dropdown.innerHTML = `<div class="model-dropdown-empty model-dropdown-error" style="color:var(--danger);">${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -179,15 +182,22 @@ async function selectModel(modelId) {
 
   document.getElementById("model-dropdown").classList.remove("open");
 
-  // Cloud providers (OpenAI-compatible) have no load/unload lifecycle — just select.
-  if (!currentProvider().isLocal) {
+  // No load/unload lifecycle: cloud providers have no such endpoints, and
+  // llama.cpp has none at all — a request naming a model *is* the load. Either
+  // way, selecting is all there is to do here.
+  if (!currentProvider().isLocal || currentProvider().loadLifecycle === false) {
     selectedModel = modelId;
     safeSetItem("selectedModel", modelId);
     nameEl.textContent = modelId;
     resetIdleTimer();
     updateEjectButton();
-    const cloudProfile = await fetchModelProfile(modelId);
-    applyModelProfile(cloudProfile);
+    applyModelProfile(await fetchModelProfile(modelId));
+
+    // On an on-demand server the load happens on the next request, so say so
+    // rather than let a 30-second first reply look like a hang.
+    if (currentProvider().loadLifecycle === false && currentProvider().isLocal) {
+      showToast(`${modelId} loads on first reply — this can take ~10-30s.`);
+    }
     return;
   }
 
@@ -261,26 +271,39 @@ function applyModelProfile(profile) {
       if (repSlider) repSlider.value = profile.repetitionPenalty;
       if (repValue) repValue.textContent = profile.repetitionPenalty;
     }
-    // top_p / top_k have no slider UI; carry them straight into the request params.
+    // top_p / top_k / min_p have no slider UI; carry them straight into the
+    // request params.
     apiParams.topP = profile.top_p != null ? profile.top_p : undefined;
     apiParams.topK = profile.top_k != null ? profile.top_k : undefined;
+    apiParams.minP = profile.min_p != null ? profile.min_p : undefined;
   } else {
     // No profile for this model — clear any params inherited from a previous one.
     apiParams.topP = undefined;
     apiParams.topK = undefined;
+    apiParams.minP = undefined;
   }
 }
 
-/** Show or hide the eject button based on whether a model is loaded */
+/**
+ * Show or hide the eject button.
+ *
+ * Ejecting means "unload", which only exists on a provider that owns a model
+ * lifecycle. On llama.cpp the button would fire a request that 404s and leave
+ * the model resident anyway — a control that visibly does nothing is worse
+ * than no control, so it is hidden instead.
+ */
 function updateEjectButton() {
   const btn = document.getElementById("btn-eject");
-  if (btn) btn.classList.toggle("hidden", !selectedModel);
+  const canUnload = currentProvider().loadLifecycle !== false;
+  if (btn) btn.classList.toggle("hidden", !selectedModel || !canUnload);
 }
 
 /** Manually unload the current model (local) or clear the cloud selection. */
 async function unloadModel() {
   if (!selectedModel) return;
-  if (currentProvider().isLocal) {
+  // Only a provider that owns a model lifecycle can actually unload. On
+  // llama.cpp this is a no-op server-side, so just drop the selection.
+  if (currentProvider().isLocal && currentProvider().loadLifecycle !== false) {
     try {
       await fetch(`${API_BASE}/models/unload`, {
         method: "POST",
@@ -303,11 +326,26 @@ async function unloadModel() {
 }
 
 async function fetchModelProfile(modelId) {
+  const provider = currentProvider();
+
+  // A server that reports its own sampler defaults is authoritative; nothing
+  // scraped from a README can know how this particular model was launched.
+  if (provider.samplerSource === "props") {
+    // Still cache, so switching models does not re-probe every time.
+    const cached = safeGetJSON(`rp_profile_${modelId}`, null);
+    if (cached) return cached;
+    const fromProps = await fetchPropsProfile(provider);
+    if (fromProps) safeSetItem(`rp_profile_${modelId}`, JSON.stringify(fromProps));
+    return fromProps;
+  }
+
   const profile = RP_MODELS[modelId];
   if (!profile) return null;
   const cacheKey = `rp_profile_${modelId}`;
-  const cached = localStorage.getItem(cacheKey);
-  if (cached) return JSON.parse(cached);
+  // safeGetJSON, not a raw parse: a corrupt cache value would otherwise throw
+  // out of model selection.
+  const cached = safeGetJSON(cacheKey, null);
+  if (cached) return cached;
 
   try {
     const resp = await fetch(

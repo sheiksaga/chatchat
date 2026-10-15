@@ -56,6 +56,7 @@ function renderStoryConfig() {
     });
   }
 
+  if (typeof renderCastFields === "function") renderCastFields();
   syncStoryStyleUI();
 }
 
@@ -106,6 +107,11 @@ function useDefaultStory() {
     ],
     tags: "fantasy, mystery, adventure",
     firstPrompt: firstPrompts[style] || firstPrompts.cyoa,
+    // The cast is a separate axis from the story text — blanking it here
+    // would silently un-cast the character the user is mid-roleplay with.
+    castIds: storyConfig.castIds || [],
+    userName: storyConfig.userName || "",
+    userPersona: storyConfig.userPersona || "",
   };
   renderStoryConfig();
   saveStoryConfig();
@@ -167,7 +173,7 @@ async function generateStory() {
       'You are a creative writing assistant. Invent a completely original interactive-fiction premise. Respond with ONLY a JSON object — no prose, no code fences — with exactly these keys: "setting" (a vivid 1-2 sentence setting), "characters" (array of 2-4 objects, each with "name", "traits", and "role"), "tags" (comma-separated genres), "firstPrompt" (a short instruction that kicks off the story). ' +
       (styleHints[styleId] || styleHints.cyoa);
     var user = "Generate a fresh, random story configuration now as JSON.";
-    var response = await fetch(API_BASE + "/chat/completions", {
+    var response = await fetchApi(API_BASE + "/chat/completions", {
       method: "POST",
       headers: apiHeaders(),
       body: JSON.stringify({
@@ -208,6 +214,10 @@ async function generateStory() {
         : [],
       tags: parsed.tags || "",
       firstPrompt: parsed.firstPrompt || "",
+      // Generated prose must not disturb the cast — see useDefaultStory().
+      castIds: storyConfig.castIds || [],
+      userName: storyConfig.userName || "",
+      userPersona: storyConfig.userPersona || "",
     };
     renderStoryConfig();
     saveStoryConfig();
@@ -268,13 +278,20 @@ function fadeSwapText(el, newText) {
 /** Reflect the active story style in the pills, hero placeholder, and first-prompt hint. */
 function syncStoryStyleUI() {
   var active = currentStyle();
-  ["cyoa", "roleplay", "gm"].forEach(function (id) {
+  ["cyoa", "roleplay", "gm", "character"].forEach(function (id) {
     var pill = document.getElementById("style-pill-" + id);
     if (pill) {
       pill.classList.toggle("active", id === active);
       pill.setAttribute("aria-pressed", String(id === active));
     }
   });
+  // The cast picker is the whole point of character mode, and meaningless
+  // without it — the other styles get their characters from the form below.
+  var castEl = document.getElementById("story-cast");
+  if (castEl) castEl.classList.toggle("hidden", active !== "character");
+  if (active === "character" && typeof renderCastPicker === "function") {
+    renderCastPicker();
+  }
   // Narration voice pills only apply to (and only show for) roleplay style.
   var narrationGroup = document.getElementById("story-narration-pills");
   if (narrationGroup) {
@@ -363,6 +380,7 @@ function setMode(mode) {
   }
 
   if (typeof refreshHeroSendButton === "function") refreshHeroSendButton();
+  if (typeof updateComposerHints === "function") updateComposerHints();
 }
 
 /**
@@ -435,6 +453,14 @@ function saveStoryConfig() {
  */
 function init() {
   migrateData();
+
+  // The card library is global and the avatars are needed synchronously by
+  // the transcript renderer, so warm the cache before the first paint of a
+  // character chat.
+  if (typeof hydrateCardAvatars === "function") {
+    hydrateCardAvatars().catch((e) => console.warn("Card avatars unavailable:", e));
+  }
+  if (typeof setupCastInputs === "function") setupCastInputs();
 
   // Always land on the home screen on load/refresh — a stored chat's
   // transcript is restored only when the user picks it from the sidebar
@@ -533,10 +559,15 @@ document.addEventListener("DOMContentLoaded", () => {
   updateImageModelVisibility();
   init();
   startOfflineDetection();
+  // Generated images are capped to the transcript's real height, which changes
+  // with the viewport (and when the chat view replaces the hero).
+  updateGeneratedImageHeight();
+  window.addEventListener("resize", updateGeneratedImageHeight);
   document
     .getElementById("chat-input")
     .addEventListener("keydown", handleChatKeydown);
   setupHeroInput();
+  updateComposerHints();
   initTextareaAutoResize();
   initOrbTracking();
 

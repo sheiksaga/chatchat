@@ -48,14 +48,20 @@ function imageProviderHeaders(cfg, extra) {
 
 /**
  * Generate an image via whichever provider {@link resolveImageProvider}
- * picks, using the OpenAI-compatible image request shape (prompt/model/
- * size/n) — the only shape this app supports, since every configured
- * provider is required to be OpenAI-compatible.
+ * picks.
+ *
+ * Two request shapes are in play. Everything except ComfyUI speaks the
+ * OpenAI-compatible image request (prompt/model/size/n). ComfyUI has no such
+ * endpoint — it takes a node graph and reports results out of band — so it is
+ * handed off to comfyGenerate(), which returns the same thing: a data: URL.
+ *
  * @param {string} prompt
  * @param {AbortSignal} [signal]
+ * @param {{seed?:number}} [ctx] Per-chat context. `seed` is the chat's locked
+ *   image seed, which keeps a character's look stable across generations.
  * @returns {Promise<string>} A data: URL for the generated image
  */
-async function requestImage(prompt, signal) {
+async function requestImage(prompt, signal, ctx) {
   const { cfg, ambiguous } = resolveImageProvider();
   if (ambiguous) {
     throw new Error(
@@ -73,6 +79,15 @@ async function requestImage(prompt, signal) {
         cfg.label +
         " — add one under Provider in settings",
     );
+  }
+
+  if (cfg.api === "comfyui") {
+    return await comfyGenerate({
+      cfg: cfg,
+      vars: comfyVars(prompt, ctx && ctx.seed),
+      signal: signal,
+      onStatus: ctx && ctx.onStatus,
+    });
   }
 
   const body = {
@@ -198,15 +213,12 @@ async function generateImageMessage(prompt, opts) {
   messagesEl.appendChild(loadingDiv);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
-  disableInputs(true);
-  document
-    .querySelectorAll(".btn-stop")
-    .forEach((b) => b.classList.remove("hidden"));
-  document
-    .querySelectorAll(".btn-send")
-    .forEach((b) => b.classList.add("hidden"));
-
-  currentAbortController = new AbortController();
+  // Image generation runs as a background task — deliberately not wired into
+  // disableInputs()/btn-stop/the shared `currentAbortController` used by text
+  // streaming, so the user can keep chatting (and even kick off another
+  // generation) while an image is still loading. Its own controller means
+  // stopping a chat reply can't accidentally cancel an in-flight image.
+  const abortController = new AbortController();
 
   try {
     if (opts.raw && !prompt)
@@ -216,16 +228,29 @@ async function generateImageMessage(prompt, opts) {
 
     // Anything but /img goes through the summariser, with the user's text
     // steering the shot rather than replacing the scene.
+    // Bring the per-chat scene record up to date before it is used. The
+    // background update after each reply usually has it already, but this is
+    // what makes the image correct even when that update failed, was
+    // interrupted by a chat switch, or has not finished yet.
+    const sceneState = typeof refreshSceneState === "function"
+      ? await refreshSceneState(abortController.signal, (status) => {
+          loadingDiv.textContent = status;
+        })
+      : null;
+    loadingDiv.className = "message assistant loading-indicator";
+    loadingDiv.textContent = "";
+
     if (!opts.raw) {
       loadingDiv.classList.remove("loading-indicator");
       loadingDiv.className = "message assistant scene-prompt-pending";
       loadingDiv.textContent = "Reading the scene…";
       prompt = await buildScenePrompt(
-        currentAbortController.signal,
+        abortController.signal,
         (status) => {
           loadingDiv.textContent = status;
         },
         prompt,
+        sceneState,
       );
       loadingDiv.className = "message assistant loading-indicator";
       loadingDiv.textContent = "";
@@ -235,17 +260,24 @@ async function generateImageMessage(prompt, opts) {
     // "/img Jess smiling" matches the Jess a bare /image produced.
     const composed = await applyImageProfile(
       prompt,
-      currentAbortController.signal,
+      abortController.signal,
       (status) => {
         loadingDiv.textContent = status;
       },
+      sceneState,
     );
     loadingDiv.className = "message assistant loading-indicator";
     loadingDiv.textContent = "";
 
     const dataUrl = await requestImage(
       composed.prompt,
-      currentAbortController.signal,
+      abortController.signal,
+      {
+        seed: composed.seed,
+        onStatus: (status) => {
+          loadingDiv.textContent = status;
+        },
+      },
     );
 
     const id = newImageId();
@@ -268,9 +300,13 @@ async function generateImageMessage(prompt, opts) {
 
     loadingDiv.classList.remove("loading-indicator");
     loadingDiv.dataset.msgIndex = newIdx;
-    renderImageMessage(loadingDiv, chatHistory[newIdx]);
+    // Awaited: the <img> is created from an IndexedDB read, so without this the
+    // scroll and image-settling below run against a transcript the image is not
+    // in yet.
+    await renderImageMessage(loadingDiv, chatHistory[newIdx]);
     addMessageToolbar(loadingDiv, newIdx);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    settleScrollAfterImages(messagesEl);
     announceToSR(`Image generated for ${prompt}`);
     return newIdx;
   } catch (err) {
@@ -286,14 +322,6 @@ async function generateImageMessage(prompt, opts) {
     addRetryButton(loadingDiv, () => generateImageMessage(originalPrompt, opts));
     return -1;
   } finally {
-    disableInputs(false);
-    currentAbortController = null;
-    document
-      .querySelectorAll(".btn-stop")
-      .forEach((b) => b.classList.add("hidden"));
-    document
-      .querySelectorAll(".btn-send")
-      .forEach((b) => b.classList.remove("hidden"));
     safeSetItem(
       STORAGE_KEY_PREFIX + currentChatId,
       JSON.stringify(chatHistory),
@@ -450,13 +478,12 @@ async function openImageModelSelector() {
     '<div class="model-dropdown-item" style="color:var(--text-muted);pointer-events:none;">Loading models...</div>';
 
   try {
-    const response = await fetch(`${cfg.baseUrl}/models`, {
-      headers: imageProviderHeaders(cfg),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    const models = (data.data || []).map((m) => m.id);
+    // ComfyUI exposes no /models: what it can render is the set of checkpoints
+    // its loader node accepts, which is exactly the list we want here.
+    const models =
+      cfg.api === "comfyui"
+        ? await comfyCheckpoints(cfg, AbortSignal.timeout(8000))
+        : await fetchImageModelList(cfg);
 
     dropdown.innerHTML = "";
 
@@ -471,9 +498,24 @@ async function openImageModelSelector() {
     appendManualEntryLink(dropdown);
   } catch (err) {
     if (cfg.id === "local_image") notifyLocalServerUnreachable();
-    dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Can't reach ${cfg.label}: ${err.message}</div>`;
+    dropdown.innerHTML = `<div class="model-dropdown-item" style="color:var(--danger);">Can't reach ${cfg.label}: ${escapeHtml(err.message)}</div>`;
     renderImageModelHistoryList(dropdown, cfg);
   }
+}
+
+/**
+ * Fetch the model ids an OpenAI-compatible provider advertises.
+ * @param {object} cfg
+ * @returns {Promise<string[]>}
+ */
+async function fetchImageModelList(cfg) {
+  const response = await fetchApi(`${cfg.baseUrl}/models`, {
+    headers: imageProviderHeaders(cfg),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  return (data.data || []).map((m) => m.id);
 }
 
 /** Append a small "type a custom id instead" fallback below a fetched local model list. */

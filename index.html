@@ -548,7 +548,7 @@
                   type="range"
                   id="image-steps"
                   min="1"
-                  max="8"
+                  max="40"
                   step="1"
                   value="4"
                 />
@@ -581,6 +581,68 @@
                 >
               </div>
 
+              <!-- ComfyUI only: it takes a node graph, not prompt+size, so it
+                   needs its own workflow/aspect/sampler controls. Hidden
+                   unless ComfyUI is the selected image provider. -->
+              <div id="comfy-settings" class="hidden">
+                <label class="settings-label" for="comfy-workflow">
+                  ComfyUI workflow
+                </label>
+                <select class="story-config-input" id="comfy-workflow"></select>
+                <p class="settings-hint" id="comfy-workflow-hint"></p>
+
+                <label class="settings-label" for="comfy-workflow-json">
+                  Paste a workflow (overrides the one above)
+                </label>
+                <textarea
+                  class="settings-textarea comfy-workflow-json"
+                  id="comfy-workflow-json"
+                  placeholder="Paste a workflow exported with Workflow &rarr; Export (API). Leave empty to use the workflow selected above."
+                  spellcheck="false"
+                ></textarea>
+                <div class="comfy-workflow-actions">
+                  <button
+                    type="button"
+                    class="settings-btn"
+                    id="comfy-workflow-clear"
+                  >
+                    Clear pasted workflow
+                  </button>
+                  <span class="settings-hint" id="comfy-workflow-status"></span>
+                </div>
+
+                <label class="settings-label" for="comfy-aspect">Aspect</label>
+                <select class="story-config-input" id="comfy-aspect">
+                  <option value="PORTRAIT">Portrait — 832 x 1216</option>
+                  <option value="SQUARE">Square — 1024 x 1024</option>
+                  <option value="LANDSCAPE">Landscape — 1216 x 832</option>
+                  <option value="CINEMA">Cinema — 1536 x 640</option>
+                </select>
+
+                <div class="settings-slider-row">
+                  <label for="comfy-cfg">CFG scale</label>
+                  <input
+                    type="range"
+                    id="comfy-cfg"
+                    min="1"
+                    max="8"
+                    step="0.5"
+                    value="1"
+                  />
+                  <span class="settings-slider-val" id="comfy-cfg-val">1.0</span>
+                </div>
+
+                <label class="settings-label" for="comfy-negative-prompt">
+                  Negative prompt
+                </label>
+                <textarea
+                  class="settings-textarea"
+                  id="comfy-negative-prompt"
+                  placeholder="bad quality, worst quality, lowres, blurry..."
+                  spellcheck="false"
+                ></textarea>
+              </div>
+
               <label class="settings-label" for="system-prompt"
                 >System Prompt / Persona</label
               >
@@ -597,7 +659,7 @@
                   id="temperature"
                   min="0.1"
                   max="2.0"
-                  step="0.1"
+                  step="0.01"
                   value="0.7"
                 />
                 <span class="settings-slider-val" id="temp-value">0.7</span>
@@ -609,7 +671,7 @@
                   id="repetition-penalty"
                   min="1.0"
                   max="2.0"
-                  step="0.1"
+                  step="0.01"
                   value="1.1"
                 />
                 <span class="settings-slider-val" id="rep-value">1.1</span>
@@ -806,6 +868,16 @@
               >
                 Game Master
               </button>
+              <button
+                type="button"
+                class="mini-pill"
+                id="style-pill-character"
+                onclick="setStoryStyle('character')"
+                aria-pressed="false"
+                title="Play a character card — a SillyTavern PNG/.json card, or one you write here. The card supplies the description, personality, scenario, example dialogue and opening greeting."
+              >
+                Character
+              </button>
             </div>
 
             <!-- Narration voice (roleplay style only) -->
@@ -835,6 +907,59 @@
               >
                 Third Person
               </button>
+            </div>
+
+            <!-- Character cast (character style only) -->
+            <div class="story-cast hidden" id="story-cast">
+              <div class="story-section-label">
+                Cast
+                <span class="story-label-hint"
+                  >the first card is the lead — its voice the AI writes in</span
+                >
+              </div>
+              <div class="cast-grid" id="cast-grid"></div>
+              <div class="cast-empty" id="cast-empty">
+                No character cards yet. Import a SillyTavern card, or write one
+                from scratch.
+              </div>
+              <div class="cast-actions">
+                <button
+                  type="button"
+                  class="quick-chip story-default-pill"
+                  onclick="openCardEditor()"
+                >
+                  <span class="quick-chip-icon">&#x1F464;</span> New Character
+                </button>
+                <button
+                  type="button"
+                  class="quick-chip story-default-pill"
+                  onclick="triggerCardImport()"
+                  title="Import SillyTavern .png / .json character cards"
+                >
+                  <span class="quick-chip-icon">&#x1F4E5;</span> Import Cards
+                </button>
+                <input
+                  type="file"
+                  id="card-import-input"
+                  accept=".png,.json,image/png,application/json"
+                  multiple
+                  style="display: none"
+                  onchange="handleCardImport(this)"
+                />
+              </div>
+
+              <div class="story-section-label">You</div>
+              <input
+                type="text"
+                class="story-config-input"
+                id="cast-user-name"
+                placeholder="Your name — replaces {{user}}"
+              />
+              <textarea
+                class="story-first-prompt cast-user-persona"
+                id="cast-user-persona"
+                placeholder="Describe yourself, so the character knows who they are talking to."
+              ></textarea>
             </div>
 
             <!-- Use Default pill -->
@@ -986,6 +1111,36 @@
 
           <div class="gen-stats hidden" id="hero-gen-stats" aria-live="polite"></div>
 
+          <!-- Image command affordance. Its own row rather than part of
+               #prompt-chips, because /image works in every mode while the
+               starter prompts only make sense in chat mode. -->
+          <div class="prompt-chips" id="prompt-chips-image">
+            <button
+              class="prompt-chip prompt-chip-cmd"
+              id="hero-image-chip"
+              onclick="insertImageCommand('hero-input-text')"
+              title="Generate an illustration of the current scene — puts /image in the box"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+              Illustrate the scene
+              <code class="prompt-chip-cmd-token">/image</code>
+            </button>
+          </div>
+
           <div class="hero-input-wrapper">
             <div class="hero-input" id="hero-input-box">
               <textarea
@@ -1033,6 +1188,29 @@
           </div>
           <div class="chat-input-actions">
             <button
+              class="btn-tool"
+              id="chat-image-btn"
+              onclick="insertImageCommand('chat-input')"
+              title="Generate an illustration of the current scene — puts /image in the box"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+              Illustrate
+            </button>
+            <button
               class="btn-send"
               id="chat-send-btn"
               onclick="sendChatMessage()"
@@ -1079,8 +1257,135 @@
       aria-live="polite"
       aria-atomic="true"
     ></div>
+
+    <!-- Character card editor -->
+    <div class="card-editor-overlay hidden" id="card-editor-overlay">
+      <div
+        class="card-editor"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="card-editor-title"
+      >
+        <div class="card-editor-head">
+          <h3 id="card-editor-title">New Character</h3>
+          <button
+            type="button"
+            class="btn-close"
+            onclick="closeCardEditor()"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="card-editor-body">
+          <div class="card-editor-avatar">
+            <img id="card-editor-avatar-img" class="hidden" alt="" />
+            <button
+              type="button"
+              class="btn-story-action"
+              onclick="document.getElementById('card-avatar-input').click()"
+            >
+              Choose image
+            </button>
+            <input
+              type="file"
+              id="card-avatar-input"
+              accept="image/*"
+              style="display: none"
+              onchange="handleCardAvatarPick(this)"
+            />
+          </div>
+
+          <div class="card-editor-fields">
+            <label class="ce-label" for="ce-name">Name</label>
+            <input type="text" class="story-config-input" id="ce-name" />
+
+            <label class="ce-label" for="ce-description">Description</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-description"
+              placeholder="Who they are: appearance, history, how they speak."
+            ></textarea>
+
+            <label class="ce-label" for="ce-personality">Personality</label>
+            <textarea class="story-first-prompt ce-short" id="ce-personality"></textarea>
+
+            <label class="ce-label" for="ce-scenario">Scenario</label>
+            <textarea class="story-first-prompt ce-short" id="ce-scenario"></textarea>
+
+            <label class="ce-label" for="ce-first-mes">First message</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-first-mes"
+              placeholder="The opening scene, written in the character's voice."
+            ></textarea>
+
+            <label class="ce-label" for="ce-alt-greetings"
+              >Alternate greetings <span class="ce-hint">one per line</span></label
+            >
+            <textarea class="story-first-prompt ce-short" id="ce-alt-greetings"></textarea>
+
+            <label class="ce-label" for="ce-mes-example"
+              >Example dialogue <span class="ce-hint">separate turns with &lt;START&gt;</span></label
+            >
+            <textarea class="story-first-prompt ce-short" id="ce-mes-example"></textarea>
+
+            <details class="ce-advanced">
+              <summary>Advanced</summary>
+
+              <label class="ce-label" for="ce-appearance"
+                >Appearance <span class="ce-hint">drives /image consistency</span></label
+              >
+              <textarea
+                class="story-first-prompt ce-short"
+                id="ce-appearance"
+                placeholder="hair, eyes, build, species — physical traits only"
+              ></textarea>
+
+              <label class="ce-label" for="ce-system-prompt"
+                >System prompt override</label
+              >
+              <textarea class="story-first-prompt ce-short" id="ce-system-prompt"></textarea>
+
+              <label class="ce-label" for="ce-post-history">Post-history instructions</label>
+              <textarea class="story-first-prompt ce-short" id="ce-post-history"></textarea>
+
+              <label class="ce-label" for="ce-tags">Tags <span class="ce-hint">comma separated</span></label>
+              <input type="text" class="story-config-input" id="ce-tags" />
+            </details>
+
+            <pre class="card-editor-preview hidden" id="card-editor-preview"></pre>
+          </div>
+        </div>
+
+        <div class="card-editor-foot">
+          <button
+            type="button"
+            class="btn-story-action hidden"
+            id="card-editor-delete"
+            onclick="deleteEditingCard()"
+          >
+            Delete
+          </button>
+          <button type="button" class="btn-story-action" onclick="previewCardPrompt()">
+            Preview prompt
+          </button>
+          <button type="button" class="quick-chip active" onclick="saveCardEditor()">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
     <script src="js/state.js"></script>
+    <script src="workflows/workflows.js"></script>
+    <!-- Generated by tools/sync-cards.js. Must load before js/cards.js, which
+         reads window.CHATCHAT_CARDS to build the card library. Without this tag
+         the synced cards simply do not exist at runtime. -->
+    <script src="cards/cards.js"></script>
     <script src="js/dom.js"></script>
+    <script src="js/cards.js"></script>
+    <script src="js/scenestate.js"></script>
     <script src="js/imagestore.js"></script>
     <script src="js/view.js"></script>
     <script src="js/api.js"></script>
@@ -1090,8 +1395,11 @@
     <script src="js/help.js"></script>
     <script src="js/chatlist.js"></script>
     <script src="js/scene-prompt.js"></script>
+    <script src="js/comfy.js"></script>
     <script src="js/images.js"></script>
+    <script src="js/rp.js"></script>
     <script src="js/messages.js"></script>
+    <script src="js/cardeditor.js"></script>
     <script src="js/generations.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/hero.js"></script>

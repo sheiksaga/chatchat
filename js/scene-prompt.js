@@ -43,8 +43,18 @@ function parseImageCommand(text) {
 
 /**
  * Ask the chat model to turn the recent conversation into an image prompt.
+ *
+ * `sceneState` is the chat's scene record (scenestate.js), when one is being
+ * tracked. It is supplied as an authoritative block: without it the summariser
+ * happily writes "the two of them" and no character name ever reaches the
+ * prompt for composeImagePrompt() to substitute a locked appearance into — the
+ * single biggest cause of a character changing face between images.
+ * @param {AbortSignal} [signal]
+ * @param {(s:string)=>void} [onStatus]
+ * @param {string} [direction] The user's own words after /image
+ * @param {object} [sceneState]
  */
-async function buildScenePrompt(signal, onStatus, direction) {
+async function buildScenePrompt(signal, onStatus, direction, sceneState) {
   const usable = chatHistory
     .filter((m) => !m.image && !IMAGE_COMMAND_RE.test((m.content || "").trim()))
     .map((m) => `${m.role === "user" ? "User" : "Story"}: ${m.content}`);
@@ -71,6 +81,16 @@ async function buildScenePrompt(signal, onStatus, direction) {
       `THE MOMENT (illustrate this):\n${moment}`
     : moment;
 
+  const sceneBlock = typeof sceneContextBlock === "function"
+    ? sceneContextBlock(sceneState)
+    : "";
+  if (sceneBlock) {
+    context =
+      `CURRENT SCENE STATE (authoritative — this is true right now, and ` +
+      `overrides anything older in the transcript):\n${sceneBlock}\n\n` +
+      context;
+  }
+
   if (direction) {
     context +=
       `\n\nDIRECTION (what the picture should show — obey this, but ` +
@@ -79,14 +99,24 @@ async function buildScenePrompt(signal, onStatus, direction) {
 
   const instruction =
     "You write prompts for a text-to-image model. Read the excerpt below and " +
-    "describe what the final moment LOOKS like, as a single line of comma-separated " +
-    "visual phrases: setting, who is present (by name), poses, expressions, " +
-    "state of dress, physical contact, lighting, mood, camera framing. " +
-    "Reuse every concrete detail the text gives you. Be literal " +
+    "describe what the final moment LOOKS like, as a single line of " +
+    "comma-separated visual phrases: where this is, who is present (by name), " +
+    "poses, expressions, physical contact, lighting, mood, camera framing. " +
+    "Name every person in the scene explicitly — never write \"them\", \"the " +
+    "two of them\" or \"the group\" in place of a name. " +
+    // Clothing and state are appended separately from the scene record, which
+    // is authoritative. Restating them here would both duplicate them and risk
+    // contradicting the record with whatever the prose last said.
+    "Do NOT describe clothing, state of dress or anyone's physical condition — " +
+    "those are attached automatically. Do not describe anyone's age, hair or " +
+    "face. " +
+    "Reuse every other concrete detail the text gives you. Be literal " +
     "and match the excerpt's explicitness exactly. Do not soften, censor, or " +
-    "refuse. Do not describe anyone's age, hair or face. " +
+    "refuse. " +
     "Describe one single photographic frame — never a sequence or multiple panels. " +
-    "Reply with the prompt only.";
+    // The prompt has to fit a 77-token-per-chunk text encoder, and the scene
+    // record plus the character locks already claim most of it.
+    "Stay under 50 words. Reply with the prompt only.";
 
   const raw = await requestCompletion(
     [

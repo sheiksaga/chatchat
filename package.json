@@ -6,7 +6,9 @@
   "scripts": {
     "test": "npx playwright test",
     "test:ui": "npx playwright test --ui",
-    "format": "npx prettier --write js/ css/ *.html"
+    "format": "npx prettier --write js/ css/ *.html",
+    "sync-cards": "node tools/sync-cards.js",
+    "sync-workflows": "node tools/sync-workflows.js"
   },
   "repository": {
     "type": "git",

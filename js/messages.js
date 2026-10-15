@@ -214,6 +214,10 @@ function renderMessages() {
   }
 
   const fragment = document.createDocumentFragment();
+  // renderImageMessage() is async (it reads the blob out of IndexedDB), so its
+  // <img> does not exist yet when the transcript is scrolled to the bottom
+  // below. Collect the promises to re-pin once the images have real heights.
+  const imageRenders = [];
 
   for (let i = 0; i < chatHistory.length; i++) {
     const msg = chatHistory[i];
@@ -223,14 +227,21 @@ function renderMessages() {
       // Image messages carry their blob in IndexedDB, not in the
       // message text — render from the store rather than markdown.
       div.dataset.msgIndex = i;
-      renderImageMessage(div, msg);
+      imageRenders.push(renderImageMessage(div, msg));
       addMessageToolbar(div, i);
     } else if (msg.role === "assistant") {
-      div.innerHTML = renderMarkdown(msg.content || "");
+      // A named assistant turn is a character reply. The name is only set in
+      // character mode, so plain chats keep exactly the markup they had.
+      if (msg.name) div.appendChild(characterHeader(msg.name));
+      const body = document.createElement("div");
+      body.className = msg.name ? "message-body" : "";
+      body.innerHTML = renderMarkdown(msg.content || "");
       // Apply syntax highlighting to code blocks
-      div.querySelectorAll("pre code").forEach((block) => {
+      body.querySelectorAll("pre code").forEach((block) => {
         hljs.highlightElement(block);
       });
+      if (msg.name) div.appendChild(body);
+      else div.innerHTML = body.innerHTML;
       addMessageToolbar(div, i);
       if (currentMode === "story") applyStoryFormatting(div);
     } else {
@@ -242,6 +253,115 @@ function renderMessages() {
 
   messagesEl.appendChild(fragment);
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  Promise.all(imageRenders).then(() => settleScrollAfterImages(messagesEl));
+}
+
+/** Is the scroller within `tolerance` px of the bottom? */
+function isScrolledToBottom(el, tolerance) {
+  const tol = tolerance === undefined ? 40 : tolerance;
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= tol;
+}
+
+/**
+ * Cap generated images to the transcript's height, not the window's.
+ *
+ * The transcript sits between a header and a composer, so on an 800px-tall
+ * window it is only ~614px — a portrait image capped at `70vh` (560px) still
+ * overflows it once the message padding and toolbar are added, and the bottom
+ * of the picture ends up below the fold. Measuring the scroller is exact where
+ * a `vh` figure can only ever be a guess.
+ */
+function updateGeneratedImageHeight() {
+  const messagesEl = document.getElementById("messages");
+  if (!messagesEl) return;
+  // Leave room for the message padding plus the toolbar underneath the image.
+  const cap = Math.max(160, messagesEl.clientHeight - 96);
+  document.documentElement.style.setProperty(
+    "--generated-image-max-height",
+    cap + "px",
+  );
+}
+
+/**
+ * Keep the transcript pinned to the bottom while images finish decoding.
+ *
+ * An `<img>` has no height until it decodes, so a scroll-to-bottom issued right
+ * after rendering lands short: the scroller has not yet grown to its final
+ * height, and a tall image ends up below the fold with no cue that there is
+ * more to see. Re-pinning once the real height is known fixes it.
+ *
+ * Deliberately conditional. It only acts when the reader was already at the
+ * bottom when called, and any scroll gesture cancels it — otherwise an image
+ * further up the transcript would yank the view back down while someone was
+ * reading.
+ * @param {HTMLElement} messagesEl
+ */
+function settleScrollAfterImages(messagesEl) {
+  if (!messagesEl) return;
+  if (!isScrolledToBottom(messagesEl)) return;
+
+  const repin = () => {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  };
+
+  // An image that already decoded has its height counted by this read of
+  // scrollHeight, so one immediate re-pin covers it.
+  repin();
+
+  // The rest grow the layout when they finish, so each needs its own re-pin.
+  const pending = Array.from(messagesEl.querySelectorAll("img")).filter(
+    (img) => !img.complete,
+  );
+  if (!pending.length) return;
+
+  let cancelled = false;
+  const cancel = () => {
+    cancelled = true;
+  };
+  messagesEl.addEventListener("wheel", cancel, { once: true, passive: true });
+  messagesEl.addEventListener("touchmove", cancel, { once: true, passive: true });
+  messagesEl.addEventListener("keydown", cancel, { once: true });
+
+  const guardedRepin = () => {
+    if (cancelled) return;
+    repin();
+  };
+  for (const img of pending) {
+    img.addEventListener("load", guardedRepin, { once: true });
+    // A broken image also changes the height, so re-pin either way.
+    img.addEventListener("error", guardedRepin, { once: true });
+  }
+}
+
+/**
+ * Speaker header for a character reply: avatar plus name.
+ *
+ * The avatar is only rendered when the chat's cast actually has one, so a
+ * nameless card (or a hand-written character with no image) degrades to
+ * just the name rather than a blank placeholder circle.
+ * @param {string} name
+ * @returns {HTMLElement}
+ */
+function characterHeader(name) {
+  const header = document.createElement("div");
+  header.className = "message-speaker";
+
+  const avatar = typeof cardAvatarByName === "function" ? cardAvatarByName(name) : "";
+  if (avatar) {
+    const img = document.createElement("img");
+    img.className = "message-avatar";
+    img.src = avatar;
+    img.alt = "";
+    img.loading = "lazy";
+    header.appendChild(img);
+  }
+
+  const label = document.createElement("span");
+  label.className = "message-speaker-name";
+  label.textContent = name;
+  header.appendChild(label);
+
+  return header;
 }
 
 /**
@@ -284,7 +404,12 @@ async function renderImageMessage(div, msg) {
   // The prompt is the only description available, and it is what a screen
   // reader user needs to know what was generated.
   img.alt = prompt || "Generated image";
-  img.loading = "lazy";
+  // Lazy is right for a transcript full of images, but the newest message sits
+  // just below the fold, and a lazily-deferred image there may not decode until
+  // the reader scrolls — which is exactly the case settleScrollAfterImages()
+  // cannot fix. So the last message loads eagerly.
+  const messagesEl = document.getElementById("messages");
+  img.loading = messagesEl && div.parentElement === messagesEl ? "eager" : "lazy";
   img.className = "generated-image";
   div.appendChild(img);
 }

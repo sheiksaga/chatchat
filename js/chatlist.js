@@ -113,16 +113,13 @@ function switchChat(chatId) {
   chatHistory = safeGetJSON(STORAGE_KEY_PREFIX + chatId, []);
   generationStore = safeGetJSON(GENERATIONS_PREFIX + chatId, {});
   generationIdx = {};
-  // Load story config and mode for this chat
+  // Load story config and mode for this chat. Merged over the defaults so a
+  // chat saved before a field existed still gets a usable value.
   const meta = safeGetJSON(CHAT_META_KEY, {});
-  storyConfig = meta[chatId]?.storyConfig || {
-    style: "cyoa",
-    narration: "first",
-    scene: "",
-    characters: [],
-    tags: "",
-    firstPrompt: "",
-  };
+  storyConfig = Object.assign(
+    defaultStoryConfig(),
+    meta[chatId]?.storyConfig || {},
+  );
   currentMode = meta[chatId]?.lastMode || "chat";
   renderChatList();
   // Sync mode UI if hero is visible
@@ -144,6 +141,31 @@ function switchChat(chatId) {
 /**
  * Start a new chat. Saves current chat, generates new ID, stores metadata.
  */
+/**
+ * Register the active chat in the sidebar index, creating its metadata if
+ * needed, and refresh the sidebar.
+ *
+ * Nothing else lists a chat, so any code path that puts content into the
+ * active chat must call this — otherwise the content is written to
+ * localStorage but the chat is unreachable, and a reload orphans it.
+ * Cheap and idempotent: it returns immediately once registered.
+ */
+function registerCurrentChat() {
+  if (!currentChatId) return;
+  const chats = safeGetJSON("chat_index", []);
+  if (chats.includes(currentChatId)) return;
+
+  chats.push(currentChatId);
+  safeSetItem("chat_index", JSON.stringify(chats));
+
+  const meta = safeGetJSON(CHAT_META_KEY, {});
+  if (!meta[currentChatId])
+    meta[currentChatId] = { createdAt: Date.now(), lastMode: currentMode };
+  safeSetItem(CHAT_META_KEY, JSON.stringify(meta));
+
+  renderChatList();
+}
+
 function startNewChat() {
   if (currentChatId && chatHistory.length > 0) {
     safeSetItem(
@@ -188,6 +210,10 @@ function deleteChat(chatId) {
     wasCurrent: chatId === currentChatId,
     history: localStorage.getItem(STORAGE_KEY_PREFIX + chatId),
     generations: localStorage.getItem(GENERATIONS_PREFIX + chatId),
+    // The scene record is part of the chat, so undo has to restore it too —
+    // otherwise an undone delete comes back with every character's clothing
+    // and the location forgotten.
+    scene: localStorage.getItem(SCENE_KEY_PREFIX + chatId),
     meta: meta[chatId] ? JSON.parse(JSON.stringify(meta[chatId])) : null,
   };
 
@@ -195,6 +221,7 @@ function deleteChat(chatId) {
   safeSetItem("chat_index", JSON.stringify(chats));
   localStorage.removeItem(STORAGE_KEY_PREFIX + chatId);
   localStorage.removeItem(GENERATIONS_PREFIX + chatId);
+  deleteSceneState(chatId);
 
   // Clean up chat meta
   delete meta[chatId];
@@ -268,6 +295,7 @@ function restoreDeletedChat(snap) {
     safeSetItem(STORAGE_KEY_PREFIX + snap.chatId, snap.history);
   if (snap.generations != null)
     safeSetItem(GENERATIONS_PREFIX + snap.chatId, snap.generations);
+  if (snap.scene != null) safeSetItem(SCENE_KEY_PREFIX + snap.chatId, snap.scene);
   if (snap.meta) {
     const meta = safeGetJSON(CHAT_META_KEY, {});
     meta[snap.chatId] = snap.meta;
@@ -326,6 +354,7 @@ function deleteAllChats() {
       chats.forEach((id) => {
         localStorage.removeItem(STORAGE_KEY_PREFIX + id);
         localStorage.removeItem(GENERATIONS_PREFIX + id);
+        deleteSceneState(id);
       });
       safeSetItem("chat_index", "[]");
       localStorage.removeItem(CHAT_META_KEY);
