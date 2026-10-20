@@ -17,6 +17,12 @@ const STORY_FORMATTING_LINE =
 function storyConfigLines(cfg) {
   const out = [];
   if (cfg.scene) out.push("\nScene: " + cfg.scene);
+  // The cast cards are the character source; the lead card comes first, so
+  // the styles' "the FIRST character listed below" rule points at it.
+  out.push.apply(out, castCharacterLines(cfg));
+  // Hand-written rows survive on configs that predate the cast picker (Use
+  // Default, Generate and story import still write them). They ride along as
+  // extra context rather than being dropped.
   if (cfg.characters && cfg.characters.length > 0) {
     cfg.characters.forEach(function (c) {
       if (!c.name) return;
@@ -25,9 +31,42 @@ function storyConfigLines(cfg) {
       out.push(line);
     });
   }
+  const userName = ((cfg && cfg.userName) || "").trim();
+  const persona = ((cfg && cfg.userPersona) || "").trim();
+  if (persona) {
+    out.push("The user (" + (userName || DEFAULT_USER_NAME) + "): " + persona);
+  } else if (userName) {
+    out.push("The user's name is " + userName + ".");
+  }
   if (cfg.tags) out.push("Tags/Genre: " + cfg.tags);
   if (cfg.firstPrompt) out.push("\n" + cfg.firstPrompt);
   return out;
+}
+
+/**
+ * Character lines for the cast cards: name, traits (personality and
+ * description) and the card's scenario. Card fields routinely carry
+ * {{user}}/{{char}} macros, so they are expanded before the line is built.
+ * @param {object} cfg storyConfig
+ * @returns {string[]}
+ */
+function castCharacterLines(cfg) {
+  if (typeof getCast !== "function") return [];
+  const userName = ((cfg && cfg.userName) || "").trim() || DEFAULT_USER_NAME;
+  return getCast()
+    .filter((card) => card && card.name)
+    .map(function (card) {
+      const macros = characterMacros(card, cfg, userName);
+      const traits = [card.personality, card.description]
+        .map((s) => (s || "").trim().replace(/[.\s]+$/, ""))
+        .filter(Boolean)
+        .map((s) => applyMacros(s, macros))
+        .join(". ");
+      let line = "Character \u2014 " + card.name + ": " + (traits || "unknown");
+      const scenario = (card.scenario || "").trim();
+      if (scenario) line += ". Scenario: " + applyMacros(scenario, macros);
+      return line;
+    });
 }
 
 /**
@@ -58,7 +97,7 @@ const STORY_STYLES = {
     buildPrompt: function (cfg) {
       var narrationLine =
         cfg.narration === "third"
-          ? "The FIRST character listed below is your lead character \u2014 narrate them in third person, using their name and pronouns rather than \"I\", as a novel would. Voice every other listed character as an NPC when the scene calls for it."
+          ? 'The FIRST character listed below is your lead character \u2014 narrate them in third person, using their name and pronouns rather than "I", as a novel would. Voice every other listed character as an NPC when the scene calls for it.'
           : "The FIRST character listed below is your lead character \u2014 speak and act as them in first person, in character. Voice every other listed character as an NPC when the scene calls for it.";
       var parts = [
         "You are a masterful roleplay partner running in story mode.",
@@ -90,29 +129,11 @@ const STORY_STYLES = {
       return parts.concat(storyConfigLines(cfg)).join("\n");
     },
   },
-  character: {
-    label: "Character",
-    hero: "Say or do something…",
-    /**
-     * Character mode normally bypasses this: streamAssistantResponse() calls
-     * buildRPMessages() (js/rp.js) with the real transcript. This is the
-     * fallback for the style being selected with nobody cast yet.
-     */
-    buildPrompt: function (cfg) {
-      var cast = getCast();
-      if (cast.length) return buildRPMessages(cast, cfg, [])[0].content;
-      return [
-        "You are a skilled roleplay partner.",
-        "No character card is selected yet — ask the user which character they want to play.",
-        STORY_FORMATTING_LINE,
-      ].join("\n");
-    },
-  },
 };
 
 /**
  * Resolve the active, valid story style id (defaults to 'cyoa').
- * @returns {'cyoa'|'roleplay'|'gm'|'character'}
+ * @returns {'cyoa'|'roleplay'|'gm'}
  */
 function currentStyle() {
   return storyConfig && STORY_STYLES[storyConfig.style]
@@ -137,33 +158,6 @@ function buildStoryPrompt() {
 }
 
 /**
- * Open a character chat with the card's greeting already in place.
- *
- * Two things fall out of doing it this way rather than as a first user
- * turn: the scene exists before the player types anything (which is how
- * SillyTavern feels), and seeding every greeting into generationStore
- * means the app's existing swipe cycler already covers
- * `alternate_greetings` with no new machinery.
- *
- * @param {object} card
- * @returns {boolean} true when a greeting was written
- */
-function seedGreeting(card) {
-  if (!card || chatHistory.length > 0 || !currentChatId) return false;
-  const greetings = cardGreetings(card);
-  if (!greetings.length) return false;
-
-  chatHistory = [{ role: "assistant", content: greetings[0], name: card.name }];
-  generationStore = { 0: greetings.slice() };
-  generationIdx = { 0: 0 };
-  saveGenerations();
-  safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
-  // The chat now has content, so it must become reachable from the sidebar.
-  registerCurrentChat();
-  return true;
-}
-
-/**
  * Shared helper: stream an assistant response for the current chatHistory.
  * Returns the index of the new assistant message, or -1 on error.
  * @returns {Promise<number>}
@@ -171,21 +165,9 @@ function seedGreeting(card) {
 async function streamAssistantResponse() {
   const messagesEl = document.getElementById("messages");
   const systemPrompt = document.getElementById("system-prompt").value.trim();
-  const cast = currentMode === "story" ? getCast() : [];
 
   const loadingDiv = document.createElement("div");
   loadingDiv.className = "message assistant loading-indicator";
-  // In character mode the reply belongs to a named speaker, so build the same
-  // header + body shape renderMessages() produces and stream into the body.
-  // Otherwise a streamed reply renders as a bare paragraph and only gains its
-  // avatar and speaker name after something forces a full re-render.
-  let renderEl = loadingDiv;
-  if (cast.length) {
-    loadingDiv.appendChild(characterHeader(cast[0].name));
-    renderEl = document.createElement("div");
-    renderEl.className = "message-body";
-    loadingDiv.appendChild(renderEl);
-  }
   messagesEl.appendChild(loadingDiv);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -200,14 +182,8 @@ async function streamAssistantResponse() {
 
   try {
     let messages;
-    let stop;
 
-    if (cast.length) {
-      // Character mode: card-shaped prompt, speaker-prefixed transcript, and
-      // stop strings so the model cannot write the user's half of the scene.
-      messages = buildRPMessages(cast, storyConfig, chatHistory);
-      stop = rpStopStrings(cast, storyConfig.userName);
-    } else if (currentMode === "story") {
+    if (currentMode === "story") {
       messages = [
         { role: "system", content: buildStoryPrompt() },
         ...chatHistory,
@@ -218,25 +194,23 @@ async function streamAssistantResponse() {
       messages = chatHistory;
     }
 
-    const rawResponse = await streamResponse(messages, loadingDiv, {
-      stop,
-      renderEl,
-    });
+    const rawResponse = await streamResponse(messages, loadingDiv);
     if (rawResponse) {
       // Includes the case where the user stopped mid-stream — keep the partial text
-      const fullResponse = cast.length
-        ? stripLeadingSpeaker(rawResponse, cast, storyConfig.userName) || rawResponse
-        : rawResponse;
-      const assistantMsg = { role: "assistant", content: fullResponse };
-      // Tagging the speaker is what lets renderMessages() attach the right
-      // avatar, and what keeps group scenes attributable in the transcript.
-      if (cast.length) assistantMsg.name = cast[0].name;
+      const assistantMsg = { role: "assistant", content: rawResponse };
       chatHistory.push(assistantMsg);
       const newIdx = chatHistory.length - 1;
       loadingDiv.classList.remove("loading-indicator");
       addMessageToolbar(loadingDiv, newIdx);
       if (currentMode === "story") applyStoryFormatting(loadingDiv);
-      announceToSR(fullResponse);
+      announceToSR(rawResponse);
+      // Fold this exchange into the chat's story file in the background. Fire
+      // and forget: it is an extra model call, and making the reader wait for
+      // it before they can read the reply they just got would be the wrong
+      // trade.
+      if (typeof scheduleStoryFileUpdate === "function") {
+        scheduleStoryFileUpdate();
+      }
       return newIdx;
     }
     // Aborted before any content streamed — drop the empty placeholder
@@ -249,7 +223,9 @@ async function streamAssistantResponse() {
     const detail = err.networkUnreachable
       ? err.message
       : `Generation failed: ${err.message}`;
-    loadingDiv.textContent = err.networkUnreachable ? detail : `Error: ${detail}`;
+    loadingDiv.textContent = err.networkUnreachable
+      ? detail
+      : `Error: ${detail}`;
     loadingDiv.classList.remove("loading-indicator");
     showToast(detail, "error");
     addRetryButton(loadingDiv, () => streamAssistantResponse());
@@ -279,16 +255,34 @@ async function generateResponseForHistory() {
 async function sendMessage(text) {
   if (!text) return;
 
-  // The image subsystem is being rebuilt from scratch. Keep the image mode
-  // pill, but make its absence explicit rather than silently sending a chat
-  // reply to an image prompt.
+  // /img is the verbatim escape hatch and /image is scene-aware. Both work in
+  // any mode: a plain chat has no scene record to summarise, so /image falls
+  // back to whatever the user typed after it.
+  const imageCommand =
+    typeof parseImageCommand === "function" ? parseImageCommand(text) : null;
+  if (imageCommand) {
+    await sendImagePrompt(text, imageCommand);
+    return;
+  }
+
+  // The image subsystem is being rebuilt. Chat-mode /img (above) is the only
+  // wired path so far; Image Mode's scene logic comes later.
   if (currentMode === "image") {
-    showToast("Image generation isn't available yet.", "error");
+    showToast(
+      "Image Mode isn't wired up yet — use /img in chat for now.",
+      "error",
+    );
     return;
   }
 
   if (!currentChatId) startNewChat();
   registerCurrentChat();
+
+  // A story is assumed to have a scene from its very first message, so the
+  // file is created alongside the chat rather than lazily on the first image.
+  if (currentMode === "story" && typeof ensureStoryFile === "function") {
+    ensureStoryFile(currentChatId);
+  }
 
   showChatView();
   var ta = document.getElementById("hero-input-text");
@@ -326,6 +320,101 @@ async function sendChatMessage() {
   inputEl.value = "";
   inputEl.style.height = "auto";
   await sendMessage(text);
+}
+
+/**
+ * Render an /image or /img user line and generate the image it asks for.
+ *
+ * `/img` draws fresh from the literal text. `/image` is scene-aware and, when
+ * its direction *changes the picture that already exists* ("have it be
+ * surrounded by stormy water instead"), edits that picture rather than
+ * redrawing from scratch — the picture is sent back as the img2img source, so
+ * the subject survives the change. A direction naming a fresh subject ("a man
+ * talking to a woman") draws fresh. Which one it is comes from the direction
+ * itself, see imageDirectionEdits().
+ *
+ * `userText` is the raw command line. It is kept in the transcript (and in the
+ * LLM's context) because that is what the user typed, but it is filtered back
+ * out of any prompt building — a leading command is an instruction to this
+ * app, not something the image model should be asked to draw.
+ *
+ * @param {string} userText The raw command line
+ * @param {{prompt:string, raw:boolean}} command From parseImageCommand()
+ */
+async function sendImagePrompt(userText, command) {
+  if (!currentChatId) startNewChat();
+  registerCurrentChat();
+  showChatView();
+
+  chatHistory.push({ role: "user", content: userText });
+  resetIdleTimer();
+
+  const messagesEl = document.getElementById("messages");
+  const userDiv = document.createElement("div");
+  userDiv.className = "message user";
+  userDiv.textContent = userText;
+  messagesEl.appendChild(userDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  safeSetItem(STORAGE_KEY_PREFIX + currentChatId, JSON.stringify(chatHistory));
+
+  await runImagePrompt(command);
+
+  document.getElementById("chat-input")?.focus();
+}
+
+/**
+ * Run the image pipeline for a command line that is already in chatHistory.
+ *
+ * Split out of sendImagePrompt() so an edited /image (or /img) line can be
+ * re-run against the same transcript slot: editing a prompt means "do that
+ * again with these words", which for an image command is a diffusion pass,
+ * not a chat reply.
+ *
+ * @param {{prompt:string, raw:boolean}} command From parseImageCommand()
+ * @returns {Promise<void>}
+ */
+async function runImagePrompt(command) {
+  try {
+    const file = getStoryFile(currentChatId);
+
+    // Does this direction change the picture that already exists (an edit), or
+    // name a new subject (a fresh draw)?
+    const picture = typeof storyPicture === "function" ? storyPicture() : null;
+    const wantsEdit =
+      !command.raw &&
+      !!picture &&
+      typeof imageDirectionEdits === "function" &&
+      imageDirectionEdits(command.prompt);
+    const hasProse =
+      typeof storyMomentLines === "function" && storyMomentLines().length > 0;
+
+    // /img takes the text as the prompt. /image asks the chat model to read
+    // the scene and compose one — worth it when there is a scene to read or a
+    // picture to keep; with neither, the text is already the whole prompt.
+    const prompt =
+      command.raw || !(hasProse || wantsEdit)
+        ? command.prompt
+        : await buildStoryImagePrompt({
+            direction: command.prompt,
+            edit: wantsEdit,
+          });
+
+    const opts = { seed: file ? file.seed : undefined };
+
+    // An edit sends the picture being edited back as the img2img source.
+    if (wantsEdit && typeof getImage === "function") {
+      const record = await getImage(picture.id).catch(() => null);
+      if (record && record.dataUrl) {
+        opts.initImage = record.dataUrl;
+        opts.denoise = imageParams.editDenoise;
+        opts.editOf = picture.id;
+      }
+    }
+
+    await generateImageMessage(prompt, opts);
+  } catch (err) {
+    showToast(err.message || String(err), "error");
+  }
 }
 
 /**
@@ -373,21 +462,25 @@ async function compressHistory() {
     const msgs = chatHistory.slice(0, -1);
     msgs.push({ role: "user", content: summaryPrompt });
 
+    const payload = {
+      model: selectedModel || undefined,
+      messages: msgs,
+      temperature: 0.3,
+      stream: false,
+    };
+    addThinkingControl(payload);
     const response = await fetchApi(`${API_BASE}/chat/completions`, {
       method: "POST",
       headers: apiHeaders(),
-      body: JSON.stringify({
-        model: selectedModel || undefined,
-        messages: msgs,
-        temperature: 0.3,
-        stream: false,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
-    const summary = data.choices?.[0]?.message?.content || "";
+    const summary = stripThinkTags(
+      data.choices?.[0]?.message?.content || "",
+    );
 
     if (summary) {
       const oldLength = chatHistory.length;

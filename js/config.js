@@ -8,7 +8,18 @@ function initSliders() {
   if (tempSlider) {
     tempSlider.addEventListener("input", () => {
       apiParams.temperature = parseFloat(tempSlider.value);
-      tempValue.textContent = tempSlider.value;
+      temperatureUserSet = true;
+      temperatureAuto = false;
+      tempValue.textContent = formatSamplerValue(tempSlider.value);
+    });
+  }
+  if (tempValue && tempSlider) {
+    tempValue.title = "Double-click to use the model's own temperature";
+    tempValue.addEventListener("dblclick", () => {
+      temperatureUserSet = false;
+      temperatureAuto = currentProvider().samplerSource === "props";
+      apiParams.temperature = parseFloat(tempSlider.defaultValue);
+      renderSamplerSliders();
     });
   }
 
@@ -17,7 +28,18 @@ function initSliders() {
   if (repSlider) {
     repSlider.addEventListener("input", () => {
       apiParams.repetitionPenalty = parseFloat(repSlider.value);
-      repValue.textContent = repSlider.value;
+      repetitionUserSet = true;
+      repetitionAuto = false;
+      repValue.textContent = formatSamplerValue(repSlider.value);
+    });
+  }
+  if (repValue && repSlider) {
+    repValue.title = "Double-click to use the model's own repetition penalty";
+    repValue.addEventListener("dblclick", () => {
+      repetitionUserSet = false;
+      repetitionAuto = currentProvider().samplerSource === "props";
+      apiParams.repetitionPenalty = parseFloat(repSlider.defaultValue);
+      renderSamplerSliders();
     });
   }
 
@@ -48,6 +70,8 @@ function initSliders() {
   }
 
   initProviderUI();
+  // Show "auto" until a profile or a user move assigns a concrete value.
+  renderSamplerSliders();
 }
 
 /** Apply saved appearance prefs (message width, font size) to CSS vars + sliders. */
@@ -275,6 +299,8 @@ function selectProvider(kind, id) {
   setActiveImageProvider(id);
   renderProviderRow("image");
   renderProviderDetail("image");
+  if (typeof updateImageModelVisibility === "function")
+    updateImageModelVisibility();
   const label = id === "auto" ? "Auto" : getProviderConfig(id).label;
   showToast("Image provider: " + label, "success");
 }
@@ -315,6 +341,8 @@ function initProviderUI() {
   renderProviderDetail("text");
   renderProviderRow("image");
   renderProviderDetail("image");
+  if (typeof updateImageModelVisibility === "function")
+    updateImageModelVisibility();
 }
 
 /** Switch the text/chat provider, reset model selection, and re-check reachability. */
@@ -325,6 +353,10 @@ function switchProvider(id) {
     return;
   }
   setActiveProvider(id);
+
+  // The new provider may or may not have server-side sampler presets. Reset
+  // the sampler mode now; selecting a model will apply its profile if any.
+  if (typeof applyModelProfile === "function") applyModelProfile(null);
 
   // Model lists differ between providers — clear the current selection so the
   // user re-picks a valid model for this provider.
@@ -441,6 +473,11 @@ document.addEventListener("keydown", (e) => {
     if (dropdown && dropdown.classList.contains("open")) {
       dropdown.classList.remove("open");
       document.getElementById("model-selector")?.focus();
+    }
+    const imageDropdown = document.getElementById("image-model-dropdown");
+    if (imageDropdown && imageDropdown.classList.contains("open")) {
+      imageDropdown.classList.remove("open");
+      document.getElementById("image-model-selector")?.focus();
     }
   }
 });

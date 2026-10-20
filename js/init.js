@@ -9,54 +9,15 @@ function renderStoryConfig() {
   const sceneEl = document.getElementById("story-scene");
   const tagsEl = document.getElementById("story-tags");
   const firstPromptEl = document.getElementById("story-first-prompt");
-  const charList = document.getElementById("story-characters-list");
 
   if (sceneEl) sceneEl.value = storyConfig.scene || "";
   if (tagsEl) tagsEl.value = storyConfig.tags || "";
   if (firstPromptEl) firstPromptEl.value = storyConfig.firstPrompt || "";
 
-  if (charList) {
-    charList.innerHTML = "";
-    (storyConfig.characters || []).forEach((char, i) => {
-      const row = document.createElement("div");
-      row.className = "story-char-row";
-      row.innerHTML =
-        '<input type="text" placeholder="Name" value="' +
-        escapeHtml(char.name) +
-        '" data-idx="' +
-        i +
-        '" data-field="name">' +
-        '<input type="text" placeholder="Characteristics" value="' +
-        escapeHtml(char.traits) +
-        '" data-idx="' +
-        i +
-        '" data-field="traits">' +
-        '<input type="text" placeholder="Relationship / Role" value="' +
-        escapeHtml(char.role || "") +
-        '" data-idx="' +
-        i +
-        '" data-field="role">' +
-        '<button class="btn-del-char" onclick="removeCharacterRow(' +
-        i +
-        ')" aria-label="Remove character" title="Remove">' +
-        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
-      charList.appendChild(row);
-    });
-
-    // Wire live input listeners on the new rows
-    charList.querySelectorAll("input").forEach((input) => {
-      input.addEventListener("input", () => {
-        var idx = parseInt(input.dataset.idx);
-        var field = input.dataset.field;
-        if (!storyConfig.characters[idx])
-          storyConfig.characters[idx] = { name: "", traits: "" };
-        storyConfig.characters[idx][field] = input.value;
-        saveStoryConfig();
-      });
-    });
-  }
-
   if (typeof renderCastFields === "function") renderCastFields();
+  // The story file is per chat and rewritten in the background, so it is
+  // re-read here on every mode change and chat switch rather than cached.
+  if (typeof renderStoryFilePanel === "function") renderStoryFilePanel();
   syncStoryStyleUI();
 }
 
@@ -68,20 +29,6 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function addCharacterRow() {
-  if (!storyConfig.characters) storyConfig.characters = [];
-  storyConfig.characters.push({ name: "", traits: "", role: "" });
-  renderStoryConfig();
-  saveStoryConfig();
-}
-
-function removeCharacterRow(index) {
-  if (!storyConfig.characters) return;
-  storyConfig.characters.splice(index, 1);
-  renderStoryConfig();
-  saveStoryConfig();
 }
 
 function useDefaultStory() {
@@ -121,6 +68,8 @@ function useDefaultStory() {
     : "";
   if (!heroText) {
     if (!currentChatId) startNewChat();
+    // The chat exists now, so the draft config belongs to it.
+    saveStoryConfig();
     showChatView();
     streamAssistantResponse();
   } else {
@@ -173,27 +122,29 @@ async function generateStory() {
       'You are a creative writing assistant. Invent a completely original interactive-fiction premise. Respond with ONLY a JSON object — no prose, no code fences — with exactly these keys: "setting" (a vivid 1-2 sentence setting), "characters" (array of 2-4 objects, each with "name", "traits", and "role"), "tags" (comma-separated genres), "firstPrompt" (a short instruction that kicks off the story). ' +
       (styleHints[styleId] || styleHints.cyoa);
     var user = "Generate a fresh, random story configuration now as JSON.";
+    var payload = {
+      model: selectedModel || undefined,
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: user },
+      ],
+      temperature: 0.9,
+      stream: false,
+    };
+    addThinkingControl(payload);
     var response = await fetchApi(API_BASE + "/chat/completions", {
       method: "POST",
       headers: apiHeaders(),
-      body: JSON.stringify({
-        model: selectedModel || undefined,
-        messages: [
-          { role: "system", content: sys },
-          { role: "user", content: user },
-        ],
-        temperature: 0.9,
-        stream: false,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error("HTTP " + response.status);
     var data = await response.json();
-    var parsed = parseStoryJson(
+    var content =
       data.choices &&
-        data.choices[0] &&
-        data.choices[0].message &&
-        data.choices[0].message.content,
-    );
+      data.choices[0] &&
+      data.choices[0].message &&
+      data.choices[0].message.content;
+    var parsed = parseStoryJson(stripThinkTags(content || ""));
     if (!parsed) throw new Error("could not parse story JSON");
     var narration = storyConfig.narration === "third" ? "third" : "first";
     storyConfig = {
@@ -278,18 +229,18 @@ function fadeSwapText(el, newText) {
 /** Reflect the active story style in the pills, hero placeholder, and first-prompt hint. */
 function syncStoryStyleUI() {
   var active = currentStyle();
-  ["cyoa", "roleplay", "gm", "character"].forEach(function (id) {
+  ["cyoa", "roleplay", "gm"].forEach(function (id) {
     var pill = document.getElementById("style-pill-" + id);
     if (pill) {
       pill.classList.toggle("active", id === active);
       pill.setAttribute("aria-pressed", String(id === active));
     }
   });
-  // The cast picker is the whole point of character mode, and meaningless
-  // without it — the other styles get their characters from the form below.
+  // Characters are picked in the roleplay tab. The cast feeds the character
+  // lines of every story style, but it is edited in this one place.
   var castEl = document.getElementById("story-cast");
-  if (castEl) castEl.classList.toggle("hidden", active !== "character");
-  if (active === "character" && typeof renderCastPicker === "function") {
+  if (castEl) castEl.classList.toggle("hidden", active !== "roleplay");
+  if (active === "roleplay" && typeof renderCastPicker === "function") {
     renderCastPicker();
   }
   // Narration voice pills only apply to (and only show for) roleplay style.
@@ -453,6 +404,22 @@ function saveStoryConfig() {
  */
 function init() {
   migrateData();
+
+  // Reclaim blobs whose chat was deleted (deletion is undoable, so this only
+  // runs at startup, after any undo window has closed).
+  if (typeof pruneOrphanImages === "function") {
+    pruneOrphanImages().catch(() => {});
+  }
+
+  // The same reclaim for story files. Unlike a blob this is synchronous, so the
+  // count is worth reporting when it is not zero — it means storage was left
+  // behind by something other than the delete path.
+  if (typeof pruneOrphanStoryFiles === "function") {
+    const orphaned = pruneOrphanStoryFiles();
+    if (orphaned) {
+      console.info("Removed " + orphaned + " orphaned story file(s).");
+    }
+  }
 
   // The card library is global and the avatars are needed synchronously by
   // the transcript renderer, so warm the cache before the first paint of a
@@ -654,7 +621,12 @@ function handleStoryImport(input) {
       if (file.name.endsWith(".json")) {
         var data = JSON.parse(e.target.result);
         storyConfig = {
-          style: STORY_STYLES[data.style] ? data.style : "cyoa",
+          style:
+            data.style === "character"
+              ? "roleplay"
+              : STORY_STYLES[data.style]
+                ? data.style
+                : "cyoa",
           scene: data.scene || "",
           characters: Array.isArray(data.characters)
             ? data.characters.map(function (c) {

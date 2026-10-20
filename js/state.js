@@ -34,8 +34,9 @@ const API_PROVIDERS = {
     loadLifecycle: false,
     // Per-model sampler defaults live on the server (--models-preset), not in
     // a Hugging Face README, and are readable from GET /props as
-    // `default_generation_settings`. Reading them is what stops the request
-    // body from silently clobbering the tuned per-model temp/min-p.
+    // `default_generation_settings.params` (or the flat older shape; router
+    // mode needs ?model=). Reading them is what stops the request body from
+    // silently clobbering the tuned per-model temp/min-p.
     samplerSource: "props",
   },
   local_image: {
@@ -315,6 +316,14 @@ function migrateData() {
       changed = true;
     }
   }
+  // The 'character' style was merged into 'roleplay'; its cast lives on.
+  for (const chatId in meta) {
+    const sc = meta[chatId]?.storyConfig;
+    if (sc && typeof sc === "object" && sc.style === "character") {
+      sc.style = "roleplay";
+      changed = true;
+    }
+  }
   // Backfill narration voice on stored configs that predate the narration field.
   for (const chatId in meta) {
     const sc = meta[chatId]?.storyConfig;
@@ -369,7 +378,7 @@ let currentMode = "chat";
 
 /**
  * @typedef {object} StoryConfig
- * @property {'cyoa'|'roleplay'|'gm'|'character'} style
+ * @property {'cyoa'|'roleplay'|'gm'} style
  * @property {'first'|'third'} narration
  * @property {string} scene
  * @property {Array<{name:string, traits:string, role:string}>} characters
@@ -403,6 +412,10 @@ function defaultStoryConfig() {
 let storyConfig = defaultStoryConfig();
 
 const apiParams = {
+  // These are the app defaults, used for cloud providers and as the starting
+  // position of the sliders. On llama.cpp, `temperatureAuto`/`repetitionAuto`
+  // below decide whether they are actually sent: a server preset is
+  // authoritative until the user moves the corresponding slider.
   temperature: 0.7,
   repetitionPenalty: 1.1,
   // topP/topK/minP have no slider UI. They come from the model's sampler
@@ -413,6 +426,20 @@ const apiParams = {
   topK: undefined,
   minP: undefined,
 };
+
+/**
+ * True when the server owns this sampler and the request must omit it.
+ * llama.cpp's `--models-preset` values are the tuned defaults; sending the
+ * app's 0.7/1.1 over them was silently discarding them. Cloud providers keep
+ * the app defaults (there is no /props preset behind them).
+ */
+let temperatureAuto =
+  getProviderConfig(activeProviderId).samplerSource === "props";
+let repetitionAuto = temperatureAuto;
+
+/** True once the user moves a slider, so a profile refresh cannot clobber it. */
+let temperatureUserSet = false;
+let repetitionUserSet = false;
 
 /**
  * The server root for a provider — `baseUrl` without its trailing API version
@@ -516,6 +543,18 @@ const DEFAULT_IMAGE_MODEL = "hidream";
 const DEFAULT_IMAGE_SIZE = "1024x1024";
 const IMAGE_SIZE_MIN = 512;
 const IMAGE_SIZE_MAX = 1024;
+const DEFAULT_IMAGE_EDIT_DENOISE = 0.6;
+
+/**
+ * Clamp an edit-strength value to the usable img2img denoise range.
+ * Below ~0.1 the source picture barely changes; above ~0.95 the edit is just
+ * a redraw and the previous picture is lost.
+ */
+function clampImageEditDenoise(value) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return DEFAULT_IMAGE_EDIT_DENOISE;
+  return Math.min(0.95, Math.max(0.1, n));
+}
 
 /** Clamp a "WxH" size string's side to the slider's supported range. */
 function clampImageSize(size) {
@@ -537,4 +576,23 @@ const imageParams = {
   // Diffusion steps — another mflux-specific extra field. mflux defaults to
   // 4, which is already tuned for schnell; lower trades quality for speed.
   steps: parseInt(localStorage.getItem("image_steps"), 10) || 4,
+  // How much a follow-up /image may change the previous picture (the sampler
+  // denoise used when editing via img2img). 0.6 keeps the composition while
+  // letting the new prompt rewrite its details; raise it for bigger changes,
+  // lower it to stay close. Adjusted from the image model dropdown.
+  editDenoise: clampImageEditDenoise(
+    localStorage.getItem("image_edit_denoise"),
+  ),
 };
+
+/**
+ * Persist a new edit strength for follow-up images.
+ * @param {number} value Requested denoise
+ * @returns {number} The clamped value actually stored
+ */
+function setImageEditDenoise(value) {
+  const denoise = clampImageEditDenoise(value);
+  imageParams.editDenoise = denoise;
+  safeSetItem("image_edit_denoise", String(denoise));
+  return denoise;
+}

@@ -34,8 +34,10 @@ function resetIdleTimer() {
  * @param {string[]} ids
  * @param {string} selectedId
  * @param {(id:string) => void} onSelect
+ * @param {{badgeFor?: (id:string) => string}} [opts] Optional per-row badge
+ *   (e.g. an image model's style) rendered at the end of the row.
  */
-function renderModelDropdownList(dropdown, ids, selectedId, onSelect) {
+function renderModelDropdownList(dropdown, ids, selectedId, onSelect, opts) {
   // Type-to-filter box (sticky at top of the dropdown).
   const filter = document.createElement("input");
   filter.type = "text";
@@ -66,6 +68,15 @@ function renderModelDropdownList(dropdown, ids, selectedId, onSelect) {
       // whose id contains dots, slashes, or spaces.
       item.dataset.modelId = id;
       item.textContent = id;
+      if (opts && typeof opts.badgeFor === "function") {
+        const badge = opts.badgeFor(id);
+        if (badge) {
+          const badgeEl = document.createElement("span");
+          badgeEl.className = "model-dropdown-badge";
+          badgeEl.textContent = badge;
+          item.appendChild(badgeEl);
+        }
+      }
       if (id === selectedId) {
         item.classList.add("active");
         item.setAttribute("aria-selected", "true");
@@ -252,24 +263,71 @@ async function selectModel(modelId) {
 }
 
 /**
+ * Format a sampler value for the narrow slider readout. llama.cpp reports
+ * float32s (1.1699999570846558), which would otherwise fill the label.
+ * @param {number|string} value
+ * @returns {string}
+ */
+function formatSamplerValue(value) {
+  const text = Number(value).toFixed(2);
+  return text.endsWith("0") ? text.slice(0, -1) : text;
+}
+
+/**
+ * Reflect apiParams (or "auto") in the two sampler sliders.
+ *
+ * "auto" means the value is not sent at all; the server's launch preset is
+ * authoritative. Moving a slider replaces it with a concrete override.
+ */
+function renderSamplerSliders() {
+  const tempSlider = document.getElementById("temperature");
+  const tempValue = document.getElementById("temp-value");
+  if (tempSlider && tempValue) {
+    if (temperatureAuto) {
+      tempSlider.value = tempSlider.defaultValue || "0.7";
+      tempValue.textContent = "auto";
+    } else {
+      tempSlider.value = apiParams.temperature;
+      tempValue.textContent = formatSamplerValue(apiParams.temperature);
+    }
+  }
+
+  const repSlider = document.getElementById("repetition-penalty");
+  const repValue = document.getElementById("rep-value");
+  if (repSlider && repValue) {
+    if (repetitionAuto) {
+      repSlider.value = repSlider.defaultValue || "1.1";
+      repValue.textContent = "auto";
+    } else {
+      repSlider.value = apiParams.repetitionPenalty;
+      repValue.textContent = formatSamplerValue(apiParams.repetitionPenalty);
+    }
+  }
+}
+
+/**
  * Apply an RP model profile's sampling params to state + sliders.
  * @param {?object} profile
  */
 function applyModelProfile(profile) {
+  const llamaCpp = currentProvider().samplerSource === "props";
+
   if (profile) {
     if (profile.temperature != null) {
       apiParams.temperature = profile.temperature;
-      const tempSlider = document.getElementById("temperature");
-      const tempValue = document.getElementById("temp-value");
-      if (tempSlider) tempSlider.value = profile.temperature;
-      if (tempValue) tempValue.textContent = profile.temperature;
+      temperatureAuto = false;
+      temperatureUserSet = false;
+    } else if (!temperatureUserSet) {
+      temperatureAuto = llamaCpp;
+      if (!llamaCpp) apiParams.temperature = 0.7;
     }
     if (profile.repetitionPenalty != null) {
       apiParams.repetitionPenalty = profile.repetitionPenalty;
-      const repSlider = document.getElementById("repetition-penalty");
-      const repValue = document.getElementById("rep-value");
-      if (repSlider) repSlider.value = profile.repetitionPenalty;
-      if (repValue) repValue.textContent = profile.repetitionPenalty;
+      repetitionAuto = false;
+      repetitionUserSet = false;
+    } else if (!repetitionUserSet) {
+      repetitionAuto = llamaCpp;
+      if (!llamaCpp) apiParams.repetitionPenalty = 1.1;
     }
     // top_p / top_k / min_p have no slider UI; carry them straight into the
     // request params.
@@ -277,11 +335,22 @@ function applyModelProfile(profile) {
     apiParams.topK = profile.top_k != null ? profile.top_k : undefined;
     apiParams.minP = profile.min_p != null ? profile.min_p : undefined;
   } else {
-    // No profile for this model — clear any params inherited from a previous one.
+    // No profile for this model. On llama.cpp let the server's preset win; a
+    // cloud provider keeps the app's 0.7/1.1 defaults.
+    if (!temperatureUserSet) {
+      temperatureAuto = llamaCpp;
+      if (!llamaCpp) apiParams.temperature = 0.7;
+    }
+    if (!repetitionUserSet) {
+      repetitionAuto = llamaCpp;
+      if (!llamaCpp) apiParams.repetitionPenalty = 1.1;
+    }
     apiParams.topP = undefined;
     apiParams.topK = undefined;
     apiParams.minP = undefined;
   }
+
+  renderSamplerSliders();
 }
 
 /**
@@ -331,17 +400,15 @@ async function fetchModelProfile(modelId) {
   // A server that reports its own sampler defaults is authoritative; nothing
   // scraped from a README can know how this particular model was launched.
   if (provider.samplerSource === "props") {
-    // Still cache, so switching models does not re-probe every time.
-    const cached = safeGetJSON(`rp_profile_${modelId}`, null);
-    if (cached) return cached;
-    const fromProps = await fetchPropsProfile(provider);
-    if (fromProps) safeSetItem(`rp_profile_${modelId}`, JSON.stringify(fromProps));
-    return fromProps;
+    // No cache: a preset edit should take effect the next time the model is
+    // picked, and a router may not have sampler values until the model is
+    // loaded. One /props call per selection is cheap.
+    return await fetchPropsProfile(provider, modelId);
   }
 
   const profile = RP_MODELS[modelId];
   if (!profile) return null;
-  const cacheKey = `rp_profile_${modelId}`;
+  const cacheKey = `rp_profile_v2_${modelId}`;
   // safeGetJSON, not a raw parse: a corrupt cache value would otherwise throw
   // out of model selection.
   const cached = safeGetJSON(cacheKey, null);
@@ -388,6 +455,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (selectedModel) {
     const nameEl = document.getElementById("current-model-name");
     if (nameEl) nameEl.textContent = selectedModel;
+
+    // Restore the saved model's profile before the first reply. Without this,
+    // a reload would silently fall back to the app's old 0.7/1.1 defaults.
+    fetchModelProfile(selectedModel)
+      .then((profile) => applyModelProfile(profile))
+      .catch(() => {});
   }
   updateEjectButton();
 });

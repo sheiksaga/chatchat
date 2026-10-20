@@ -58,10 +58,19 @@ const HELP_CONTENT_HTML = `
     </p>
     <p>
       chatchat reads each model's sampler defaults from the server's
-      <code>/props</code>, so the temperature slider reflects how the model was
-      actually launched instead of overriding your preset. To set samplers for
-      a model chatchat has never seen, add them to the preset and pick the model
-      again.
+      <code>/props</code> and leaves the temperature and repetition-penalty
+      sliders on <strong>auto</strong> until you move them, so the model's
+      launch preset wins instead of being overridden by the app. In router mode
+      it asks for the selected model's properties; a model that is not loaded
+      yet may not report values until the first reply. To set samplers for a
+      model chatchat has never seen, add them to the preset and pick the model
+      again. Double-click a sampler value to return it to the model default
+      after moving it.
+    </p>
+    <p>
+      Qwen3.6 and Ornith open with a hidden <code>&lt;think&gt;</code> block by
+      default. chatchat asks llama.cpp to skip it so replies stream immediately;
+      use little-coder or SillyTavern if you want to read the reasoning trace.
     </p>
   </div>
 

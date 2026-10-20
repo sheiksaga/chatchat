@@ -6,6 +6,47 @@
 let currentAbortController = null;
 
 /**
+ * Models whose GGUF chat template opens a hidden `<think>` block by default.
+ * chatchat has no reasoning-trace UI, so leaving these on makes the bubble
+ * look frozen until the model finishes thinking.
+ * @param {string} modelId
+ * @returns {boolean}
+ */
+function isThinkingModel(modelId) {
+  return /(qwen3\.6|qwen3\.5|ornith|gemma-4)/i.test(modelId || "");
+}
+
+/**
+ * Ask llama.cpp to skip a reasoning model's hidden thinking block for this
+ * request. Only sent to the llama.cpp provider: the field is llama.cpp's
+ * `chat_template_kwargs` extension, and other providers may reject it.
+ * little-coder/SillyTavern are unaffected — they have their own thinking UI.
+ * @param {object} payload Request body, mutated in place.
+ */
+function addThinkingControl(payload) {
+  const provider = currentProvider();
+  if (!provider || provider.samplerSource !== "props") return;
+  const modelId = payload.model || selectedModel || "";
+  if (!isThinkingModel(modelId)) return;
+  payload.chat_template_kwargs = { enable_thinking: false };
+}
+
+/**
+ * Remove a reasoning trace if a server ever puts it back into `content`
+ * (llama.cpp's `reasoning_format: none` fallback). Normally the trace is in
+ * `reasoning_content` and the model is asked not to think at all.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripThinkTags(text) {
+  return String(text || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<\|channel>thought[\s\S]*?<channel\|>/gi, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .replace(/^\s+/, "");
+}
+
+/**
  * Stream a chat completion from LM Studio API and render in target element.
  * @param {Array<{role:string, content:string}>} messages - Chat messages
  * @param {HTMLElement} targetEl - DOM element to render streaming content into
@@ -24,10 +65,14 @@ async function streamResponse(messages, targetEl, opts) {
   const body = {
     model: selectedModel || undefined,
     messages: messages,
-    temperature: apiParams.temperature,
-    repeat_penalty: apiParams.repetitionPenalty,
     stream: true,
   };
+  // Only send a sampler override when one is actually in play. On llama.cpp
+  // with no /props profile, the auto flags stay true so the server's
+  // --models-preset values win instead of being clobbered by the app defaults.
+  if (!temperatureAuto) body.temperature = apiParams.temperature;
+  if (!repetitionAuto) body.repeat_penalty = apiParams.repetitionPenalty;
+  addThinkingControl(body);
   // Include optional sampling params sourced from RP model profiles, when set
   if (apiParams.topP != null) body.top_p = apiParams.topP;
   if (apiParams.topK != null) body.top_k = apiParams.topK;
@@ -117,7 +162,9 @@ async function streamResponse(messages, targetEl, opts) {
     updateGenStats(0);
   }
 
-  // Final render to catch any remaining content
+  // Final render to catch any remaining content. Strip a reasoning trace if
+  // the server returned one in `content` rather than `reasoning_content`.
+  fullResponse = stripThinkTags(fullResponse);
   if (fullResponse) {
     renderEl.innerHTML = renderMarkdown(fullResponse);
     const parent = targetEl.parentElement;
@@ -271,43 +318,79 @@ async function fetchApi(url, init) {
  * authoritative source for a model's tuned samplers: they live in the server's
  * config, not in a Hugging Face README.
  *
- * Every field is treated as optional and the whole call is best-effort. What
- * `/props` reports on a *router* server (as opposed to a single-model one) is
- * not guaranteed, so a missing or differently-shaped payload must degrade to
- * "no profile" rather than throw or wipe the user's slider settings.
+ * Current builds nest those flags under `default_generation_settings.params`;
+ * older builds put them at the top level, so both are accepted. On a router,
+ * `/props` without a model name describes the router (or whichever child is
+ * resident), so pass `?model=` to ask about the selected model. `autoload=false`
+ * keeps model selection from triggering a 10-30 second load just to read it.
+ *
+ * Every field is optional and the whole call is best-effort: a missing or
+ * differently-shaped payload degrades to "no profile" rather than throwing or
+ * wiping the user's slider settings.
  *
  * @param {{baseUrl?: string}} provider
+ * @param {string} [modelId] Selected model id (router section or direct alias).
  * @returns {Promise<?object>} A profile shaped like `applyModelProfile` expects,
  *   or null when nothing usable was returned.
  */
-async function fetchPropsProfile(provider) {
+async function fetchPropsProfile(provider, modelId) {
   const root = providerRoot(provider);
   if (!root) return null;
 
-  let data;
-  try {
-    const response = await fetchApi(`${root}/props`);
-    if (!response.ok) return null;
-    data = await response.json();
-  } catch (e) {
-    // Including the networkUnreachable case — an unreachable server already
-    // gets a clear message from the model list, and must not also break
-    // model selection.
-    return null;
+  const readProps = async (url) => {
+    try {
+      // Never let a slow/hung /props block model selection. A missed profile
+      // just means the server's own defaults stay in charge ("auto").
+      const response = await fetchApi(url, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (e) {
+      // Including the networkUnreachable case — an unreachable server already
+      // gets a clear message from the model list, and must not also break
+      // model selection.
+      return null;
+    }
+  };
+
+  let data = await readProps(`${root}/props`);
+  if (!data) return null;
+
+  if (data.role === "router" && modelId) {
+    data = await readProps(
+      `${root}/props?model=${encodeURIComponent(modelId)}&autoload=false`,
+    );
+    if (!data) return null;
   }
 
   const gen = data && data.default_generation_settings;
   if (!gen || typeof gen !== "object") return null;
 
+  // Never cache another resident model's samplers under this model's id. A
+  // router without a matching `?model=` (or a direct server mid-switch) can
+  // answer with a different model's aliases/paths.
+  if (modelId && data.model_alias && data.model_alias !== modelId) {
+    const modelPath = data.model_path || "";
+    if (!modelPath.includes(modelId)) return null;
+  }
+
+  // Current llama.cpp (b11146) nests sampler flags under `params`; older
+  // builds expose them at the top level. Accept both.
+  const params =
+    gen.params && typeof gen.params === "object" ? gen.params : gen;
+
   /** Keep only a finite number, so `null`/strings cannot reach the sliders. */
   const num = (v) => (typeof v === "number" && isFinite(v) ? v : undefined);
 
   const profile = {
-    temperature: num(gen.temp != null ? gen.temp : gen.temperature),
-    top_p: num(gen.top_p),
-    top_k: num(gen.top_k),
-    min_p: num(gen.min_p),
-    repetitionPenalty: num(gen.repeat_penalty),
+    temperature: num(
+      params.temperature != null ? params.temperature : params.temp,
+    ),
+    top_p: num(params.top_p),
+    top_k: num(params.top_k),
+    min_p: num(params.min_p),
+    repetitionPenalty: num(params.repeat_penalty),
   };
   for (const k of Object.keys(profile)) {
     if (profile[k] === undefined) delete profile[k];
@@ -330,30 +413,49 @@ function disableInputs(disabled) {
  * One-shot, non-streaming completion — for text the user never sees as prose
  * (scene summaries, prompt building) rather than a chat turn.
  * @param {Array<{role:string, content:string}>} messages
- * @param {{maxTokens?:number, temperature?:number, signal?:AbortSignal, onRetry?:Function}} [opts]
+ * @param {{maxTokens?:number, temperature?:number, signal?:AbortSignal, onRetry?:Function,
+ *   responseFormat?:object}} [opts] `responseFormat` is an OpenAI
+ *   `response_format` value (e.g. a `json_schema`). Servers that do not know
+ *   the parameter reject the whole request rather than ignoring it, so this is
+ *   dropped and retried once — the caller's own forgiving parse is the fallback.
  * @returns {Promise<string>} Trimmed assistant text
  */
 async function requestCompletion(messages, opts) {
   opts = opts || {};
-  const body = JSON.stringify({
+  const payload = {
     model: selectedModel || undefined,
     messages: messages,
     temperature: opts.temperature != null ? opts.temperature : 0.4,
     max_tokens: opts.maxTokens || 200,
     stream: false,
-  });
+  };
+  addThinkingControl(payload);
+  let schema = opts.responseFormat || null;
 
   for (let attempt = 0; ; attempt++) {
+    if (schema) payload.response_format = schema;
+    else delete payload.response_format;
+
     const response = await fetchApi(`${API_BASE}/chat/completions`, {
       method: "POST",
       headers: apiHeaders(),
-      body: body,
+      body: JSON.stringify(payload),
       signal: opts.signal,
     });
 
     if (response.ok) {
       const data = await response.json();
-      return (data.choices?.[0]?.message?.content || "").trim();
+      return stripThinkTags(
+        data.choices?.[0]?.message?.content || "",
+      ).trim();
+    }
+
+    // 400/422 is how a server says "I do not know that field". Anything the
+    // schema was meant to guarantee is still achievable by parsing, so drop it
+    // and try once more rather than failing a background update.
+    if (schema && (response.status === 400 || response.status === 422)) {
+      schema = null;
+      continue;
     }
 
     if (response.status === 429 && attempt === 0) {
