@@ -30,6 +30,16 @@
 		'rounded-lg border border-input bg-background px-3 py-2 text-ui leading-relaxed placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none';
 	const fieldLabel = 'flex flex-col gap-1.5 text-label font-medium text-muted-foreground';
 
+	/** One-line, quote-stripped preview of a greeting, for the picker's option labels. */
+	function greetingPreview(text: string) {
+		const flat = text
+			.replace(/[*_>`#]/g, '')
+			.replace(/\s+/g, ' ')
+			.replace(/^["“”']|["“”']$/g, '')
+			.trim();
+		return flat.length > 44 ? `${flat.slice(0, 44)}…` : flat;
+	}
+
 	async function save() {
 		saving = true;
 		status = '';
@@ -130,8 +140,21 @@
 				<ArrowLeft class="size-4" aria-hidden="true" />
 				Library
 			</a>
-			<form method="POST" action="/?/newChat">
+			<form method="POST" action="/?/newChat" class="flex items-center gap-1.5">
 				<input type="hidden" name="characterId" value={draft.id} />
+				{#if draft.alternateGreetings.length > 0}
+					<!-- Which opening line this chat starts from; saved with the chat, not the card. -->
+					<select
+						name="greetingIndex"
+						aria-label="Opening message"
+						class="h-9 max-w-[16rem] rounded-lg border border-border bg-background px-2 text-label text-muted-foreground"
+					>
+						<option value="-1">Opening message</option>
+						{#each draft.alternateGreetings as text, index (index)}
+							<option value={index}>Alt {index + 1}: {greetingPreview(text)}</option>
+						{/each}
+					</select>
+				{/if}
 				<button
 					class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-ui transition-colors duration-150 hover:bg-accent"
 					type="submit"

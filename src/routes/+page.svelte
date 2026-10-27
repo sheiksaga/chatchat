@@ -20,10 +20,7 @@
 
 <main class="mx-auto flex w-full max-w-3xl flex-col gap-7 px-6 py-8">
 	<header class="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-5">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-display font-semibold tracking-[-0.01em]">chatchat</h1>
-			<p class="text-ui text-muted-foreground">Local roleplay. Nothing leaves this machine.</p>
-		</div>
+		<h1 class="text-display font-semibold tracking-[-0.01em]">chatchat</h1>
 		<form method="POST" action="?/newChat">
 			<Button type="submit" size="lg" class="gap-1.5">
 				<Plus class="size-4" aria-hidden="true" />

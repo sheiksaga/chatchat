@@ -23,17 +23,28 @@ export const actions: Actions = {
 	 * `?/newChat` with an optional `characterId`. A character chat is titled after the card and
 	 * opens with its greeting already in the transcript, which is what every card UI does and what
 	 * the model needs to stay in persona from the first token.
+	 *
+	 * `greetingIndex` picks which opening line to use: `-1`/missing is the card's first message,
+	 * otherwise the 0-based index into `alternateGreetings`. The choice is baked into the stored
+	 * message, so the chat keeps whatever was picked even if the card is edited later.
 	 */
 	newChat: async ({ request }) => {
 		const form = await request.formData();
 		const characterId = String(form.get('characterId') ?? '').trim();
 		const character = characterId ? getCharacter(db(), characterId) : undefined;
+		const rawGreeting = String(form.get('greetingIndex') ?? '').trim();
+		// `Number('')` is 0, which would silently select the first alternate — treat blank as "none".
+		const greetingIndex = rawGreeting === '' ? -1 : Number(rawGreeting);
 
 		const chat = createChat(db(), { title: character?.name ?? 'New chat' });
 
 		if (character) {
 			setChatCharacter(db(), chat.id, character.id);
-			const greeting = greetingFor(character, getConfig().userName);
+			const greeting = greetingFor(
+				character,
+				getConfig().userName,
+				Number.isInteger(greetingIndex) ? greetingIndex : -1
+			);
 			if (greeting) {
 				appendMessage(db(), {
 					chatId: chat.id,
