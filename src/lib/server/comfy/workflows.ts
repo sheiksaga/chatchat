@@ -175,6 +175,45 @@ export const FLUX2_KLEIN_DEFAULTS: GraphValues = {
 	FILENAME_PREFIX: 'Flux2Klein'
 };
 
+/**
+ * The same anima turbo model in fp16 rather than int8-convrot. Identical recipe; the fp16 weights need
+ * ~4 GB instead of ~2 GB but render cleaner fine detail (faces, hair strands).
+ */
+export const ANIMA_FP16_DEFAULTS: GraphValues = {
+	...ANIMA_TURBO_DEFAULTS,
+	MODEL: 'anima-turbo-v1.1.safetensors',
+	FILENAME_PREFIX: 'AnimaFp16'
+};
+
+/** Krea2's anime fine-tune, int4-quantised (8 GB). Same distilled recipe as Krea2 Turbo. */
+export const KREA2_ANIME_DEFAULTS: GraphValues = {
+	...KREA2_DEFAULTS,
+	MODEL: 'krea2Anime_v14_int4.safetensors',
+	FILENAME_PREFIX: 'Krea2Anime'
+};
+
+/**
+ * Anima **base** v1.0 — the undistilled model. It needs what distillation removes: many steps, a real
+ * CFG weight and an actual negative prompt, which the turbo graphs cannot express (their unconditional
+ * branch is zeroed). Hence `t2i_cfg.json`, the one graph with a `{{NEGATIVE}}` slot.
+ */
+export const ANIMA_BASE_DEFAULTS: GraphValues = {
+	MODEL: 'anima-base-v1.0.safetensors',
+	CLIP: 'qwen_3_06b_base.safetensors',
+	CLIP_TYPE: 'stable_diffusion',
+	VAE: 'qwen_image_vae.safetensors',
+	SAMPLER: 'euler',
+	SCHEDULER: 'simple',
+	STEPS: 24,
+	CFG: 4.5,
+	NEGATIVE:
+		'worst quality, low quality, lowres, bad anatomy, bad hands, extra digits, watermark, text',
+	WIDTH: 832,
+	HEIGHT: 1216,
+	SEED: 1,
+	FILENAME_PREFIX: 'AnimaBase'
+};
+
 export const GRAPHS = {
 	'krea2-t2i': {
 		file: 'krea2_turbo_t2i',
@@ -193,6 +232,24 @@ export const GRAPHS = {
 		label: 'FLUX.2 Klein (T2I)',
 		kind: 't2i',
 		defaults: FLUX2_KLEIN_DEFAULTS
+	},
+	'anima-fp16-t2i': {
+		file: 'anima_turbo_t2i',
+		label: 'Anima Turbo fp16 (anime)',
+		kind: 't2i',
+		defaults: ANIMA_FP16_DEFAULTS
+	},
+	'krea2-anime-t2i': {
+		file: 'krea2_turbo_t2i',
+		label: 'Krea2 Anime v14 (int4)',
+		kind: 't2i',
+		defaults: KREA2_ANIME_DEFAULTS
+	},
+	'anima-base-t2i': {
+		file: 't2i_cfg',
+		label: 'Anima Base (quality, slow)',
+		kind: 't2i',
+		defaults: ANIMA_BASE_DEFAULTS
 	},
 	'anima-inpaint': {
 		file: 'anima_lllite_inpaint',

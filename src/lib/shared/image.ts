@@ -34,9 +34,14 @@ export const SIZE_PRESETS = [
  * the other way round — breaks `npm run verify` rather than the picker.
  */
 export const IMAGE_MODELS = [
-	{ id: 'krea2-t2i', label: 'Krea2 Turbo' },
-	{ id: 'anima-turbo-t2i', label: 'Anima Turbo (anime)' },
-	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein' }
+	// Ordered by what usually wins a story scene; the time is on a laptop 8 GB card, so a phone user
+	// knows what they are waiting for before they tap.
+	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~18 s)' },
+	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~22 s)' },
+	{ id: 'anima-base-t2i', label: 'Anima Base obedient (~27 s)' },
+	{ id: 'anima-turbo-t2i', label: 'Anima Turbo fastest (~7 s)' },
+	{ id: 'anima-fp16-t2i', label: 'Anima Turbo fp16 (~8 s)' },
+	{ id: 'krea2-t2i', label: 'Krea2 Turbo painterly (~43 s)' }
 ] as const;
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
