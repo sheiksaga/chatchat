@@ -290,6 +290,16 @@ describe('POST /api/chat', () => {
 		});
 	});
 
+	it('rejects a model the provider does not serve, instead of streaming nothing', async () => {
+		// Regression: a typo'd model id produced 200 with an empty reply and no error at all.
+		await expect(
+			chatRequest({
+				model: 'gemma-4-E4B-heretic',
+				messages: [{ id: 'u-6', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]
+			})
+		).rejects.toMatchObject({ status: 400 });
+	});
+
 	it('works without a chatId (stateless request)', async () => {
 		const response = await chatRequest({
 			model: MODEL,

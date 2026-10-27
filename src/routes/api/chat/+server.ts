@@ -57,6 +57,14 @@ export async function POST({ request }: { request: Request }) {
 	const model = parsed.data.model || activeModelFor(backend.provider.id);
 	if (!model) error(400, 'No model selected for this provider');
 
+	// A wrong model id used to produce a 200 with an empty stream (measured: a typo'd gemma id gave
+	// "no reply, no error"). Ask the backend what it actually serves and say so instead — a local
+	// server answers this in milliseconds and the user gets a sentence they can act on.
+	const available = await backend.listModels().catch(() => null as string[] | null);
+	if (available?.length && !available.includes(model)) {
+		error(400, `Unknown model "${model}". This provider serves: ${available.join(', ')}`);
+	}
+
 	// Precedence: per-request sliders > global overrides > the backend's own defaults.
 	// Getting this order wrong is what makes a tuned per-model `temp` from `models-router.ini`
 	// silently disappear, so it is stated once, here.

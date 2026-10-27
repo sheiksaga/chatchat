@@ -95,6 +95,18 @@ describe('buildScenePrompt', () => {
 		expect(scene.prompt).toContain('ruined gate');
 	});
 
+	it('drops negations, which diffusion models cannot express', () => {
+		// Measured: "no cloak" produced a picture *with* a cloak. Removing the phrase is the only
+		// honest option until the graph carries a negative prompt.
+		const scene = buildScenePrompt({
+			messages: [],
+			extra: 'plain linen dress, no cloak, without armour, calm face'
+		});
+		expect(scene.prompt).toContain('plain linen dress');
+		expect(scene.prompt).toContain('calm face');
+		expect(scene.prompt).not.toMatch(/cloak|armour/i);
+	});
+
 	it('works with no character and no messages', () => {
 		const scene = buildScenePrompt({ messages: [] });
 		expect(scene.prompt).toContain('masterpiece');

@@ -53,9 +53,9 @@ export function buildScenePrompt(input: SceneInput): ScenePrompt {
 	const moment = momentTags(input.messages);
 	if (moment) parts.push(moment);
 
-	// 3. How it is framed and rendered.
+	// 3. How it is framed and rendered. The user's own tags go last so they win.
 	parts.push(SHOT_TAGS[shot]);
-	if (input.extra?.trim()) parts.push(input.extra.trim());
+	if (input.extra?.trim()) parts.push(dropNegations(input.extra));
 	parts.push(QUALITY_TAGS);
 
 	return {
@@ -103,6 +103,21 @@ function firstClause(text: string, maxWords: number): string {
 	return words
 		.join(' ')
 		.replace(/[.,;:!?]+$/, '')
+		.trim();
+}
+
+/**
+ * Remove negations, because a diffusion prompt has no grammar for them.
+ *
+ * Measured on a real run: `no cloak` produced a picture *with* a cloak draped over the shoulder —
+ * "cloak" is a token, "no" is decoration. A negative prompt or an inpaint is the correct way to remove
+ * something; here the safe move is to drop the phrase rather than add the thing it names.
+ */
+export function dropNegations(text: string): string {
+	return text
+		.replace(/(?:^|[\s,])(?:no|without|not|never)\s+[\w-]+/gi, ' ')
+		.replace(/\s*,\s*(?=,|$)/g, '')
+		.replace(/\s+/g, ' ')
 		.trim();
 }
 
