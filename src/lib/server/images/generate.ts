@@ -136,7 +136,7 @@ function persist(input: {
 }): ImageRow {
 	const id = randomUUID();
 	const mime = sniffMime(input.bytes);
-	const file = writeImageFile(id, input.bytes, mime);
+	const file = writeImageFile(id, input.bytes, mime, input.chatId);
 	const size = pngSize(input.bytes);
 	return insertImage(db(), {
 		id,

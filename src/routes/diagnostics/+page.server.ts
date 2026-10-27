@@ -7,8 +7,9 @@ import { schemaVersion } from '$lib/server/db/index.js';
 import { getConfig } from '$lib/server/config-store.js';
 import { backendFor } from '$lib/server/backends/registry.js';
 import { comfyHealth } from '$lib/server/comfy/client.js';
-import { DATA_DIR, COMFYUI_URL, IMAGES_DIR } from '$lib/server/config.js';
+import { CHATS_DIR, DATA_DIR, COMFYUI_URL } from '$lib/server/config.js';
 import fs from 'node:fs';
+import path from 'node:path';
 
 export interface Check {
 	name: string;
@@ -62,10 +63,25 @@ export async function load() {
 	}
 
 	try {
-		const files = fs.readdirSync(IMAGES_DIR).length;
-		checks.push({ name: 'image folder', ok: true, detail: `${files} files · ${IMAGES_DIR}` });
+		// One folder per chat: transcript, story and pictures together, so `ls` answers "where is it".
+		const folders = fs
+			.readdirSync(CHATS_DIR, { withFileTypes: true })
+			.filter((e) => e.isDirectory());
+		let pictures = 0;
+		for (const folder of folders) {
+			try {
+				pictures += fs.readdirSync(path.join(CHATS_DIR, folder.name, 'images')).length;
+			} catch {
+				// chat without pictures
+			}
+		}
+		checks.push({
+			name: 'chat folders',
+			ok: true,
+			detail: `${folders.length} chats · ${pictures} pictures · ${CHATS_DIR}`
+		});
 	} catch {
-		checks.push({ name: 'image folder', ok: true, detail: `not created yet · ${IMAGES_DIR}` });
+		checks.push({ name: 'chat folders', ok: true, detail: `not created yet · ${CHATS_DIR}` });
 	}
 
 	return {

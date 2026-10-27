@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db/index.js';
+import { mirrorChat } from '$lib/server/db/layout.js';
 import { appendMessage, createChat, listChats, renameChat } from '$lib/server/db/chats.js';
 import { getCharacter, setChatCharacter } from '$lib/server/db/characters.js';
 import { getConfig } from '$lib/server/config-store.js';

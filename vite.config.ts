@@ -7,6 +7,8 @@ export default defineConfig({
 	test: {
 		environment: 'node',
 		include: ['src/**/*.{test,spec}.ts'],
-		exclude: ['src/**/*.svelte.{test,spec}.ts']
+		exclude: ['src/**/*.svelte.{test,spec}.ts'],
+		// Every spec gets a scratch `data/` so `npm run verify` can never touch the real one.
+		setupFiles: ['vitest.setup.ts']
 	}
 });

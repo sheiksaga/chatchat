@@ -10,7 +10,8 @@
  * token rather than the token itself, so it is not a copy of the secret.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, ServerInit } from '@sveltejs/kit';
+import { db } from '$lib/server/db/index.js';
 
 const COOKIE = 'chatchat_token';
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -62,6 +63,17 @@ function sameOrigin(event: Parameters<Handle>[0]['event']): boolean {
 		return false;
 	}
 }
+
+/**
+ * Open the database once at startup rather than on the first request.
+ *
+ * This is what runs the one-time data layout work (moving pictures next to their chat, pruning rows
+ * whose bytes are gone, rewriting `chat.json` mirrors), so `data/` is correct the moment the server is
+ * up — not after somebody happens to load a page.
+ */
+export const init: ServerInit = () => {
+	db();
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
 	if (!sameOrigin(event)) {

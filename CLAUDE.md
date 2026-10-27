@@ -107,7 +107,8 @@ src/lib/server/        db/, backends/, comfy/, prompts/, config.ts  (server-only
 src/lib/components/    chat/, cards/, image/, settings/, ui/ (shadcn copies)
 src/app.css            Tailwind 4 + shadcn theme tokens
 components.json        shadcn-svelte config (baseColor: zinc)
-data/                  runtime data (gitignored): chatchat.db, images/, cards/, config.json
+data/                  runtime data (gitignored): chatchat.db, config.json, cards/,
+                       chats/<chatId>/{chat.json,story.json,images/}  ← one folder per chat
 docs/                  ARCHITECTURE, PARITY (legacy → rewrite), DEPS, TROUBLESHOOTING, UI
 _notes/                PLAN.md, TODO.md, REWRITE_RESEARCH.md, model notes
 ```
@@ -186,3 +187,17 @@ Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prom
 - GPU work must be opt-in. `CHATCHAT_COMFY_SMOKE=1` for the real path; `npm run verify` and
   `npm run test:e2e` must pass with the GPU busy and ComfyUI down (the e2e config points at a dead port
   on purpose).
+
+## Data layout (do not scatter files again)
+
+`data/chats/<chatId>/` holds `chat.json` (transcript mirror), `story.json` (scene state) and
+`images/` (the chat's pictures). The database stays authoritative; the JSON files are mirrors written by
+`mirrorChat()` in `src/lib/server/db/layout.ts` after every write. Consequences:
+
+- **Any new write path must call `mirrorChat(db, chatId)`** or the folder drifts from the app.
+- Image paths in the database are **relative to `data/`** (forward slashes) and resolved by
+  `dataPath()`; never join `DATA_DIR` by hand and never store an absolute path.
+- `openDb()` prepares the layout (relocate old flat images, prune rows with missing bytes, rewrite
+  mirrors). It runs from the `init` hook, so `data/` is correct before the first request.
+- Tests get their own scratch `data/` from `vitest.setup.ts`. Do not remove it: without it a test that
+  calls `db()` writes into the developer's real chats.

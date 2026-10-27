@@ -12,6 +12,9 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '../config.js';
 import { MIGRATIONS } from './migrations.js';
+// `layout.ts` imports only *types* from this module, so this stays a one-way dependency even though
+// the graph looks circular; the helpers themselves are hoisted function declarations.
+import { mirrorAllChats, pruneMissingImages, relocateImages } from './layout.js';
 
 export type Db = DatabaseSync;
 
@@ -65,6 +68,14 @@ export function openDb(file: string = path.join(DATA_DIR, 'chatchat.db')): Db {
 	db.exec('PRAGMA foreign_keys = ON');
 	db.exec('PRAGMA busy_timeout = 5000');
 	applyMigrations(db);
+
+	// Migrate older layouts once: move flat pictures next to their chat, then rewrite every mirror.
+	if (file !== ':memory:') {
+		relocateImages(db);
+		pruneMissingImages(db);
+		mirrorAllChats(db);
+	}
+
 	return db;
 }
 

@@ -57,6 +57,30 @@ for that message, so `‹ v1/3 ›` always has the old ones.
 Immutable caching is safe because the id is random per generation; `GET /api/images/[id]` supports
 Range requests so a 2 MB picture starts painting immediately.
 
+## What is in `data/`
+
+One folder per chat, readable without the app:
+
+```
+data/
+  chatchat.db                     metadata (the app's working copy)
+  config.json                     providers, keys (0600), appearance
+  cards/<characterId>.png         card avatars, shared by every chat using the card
+  chats/<chatId>/
+    chat.json                     transcript + images + character, pretty-printed
+    story.json                    the scene record (`look`, …)
+    images/<imageId>.png          pictures, next to the chat that made them
+  images/<imageId>.png            pictures that belong to no chat
+```
+
+The database is the source of truth; `chat.json` / `story.json` are **mirrors**, rewritten atomically
+after every write (`db/layout.ts`). Delete a mirror and the app still works — the next write recreates
+it. `file` columns store paths relative to `data/`, so copying the folder anywhere changes nothing.
+
+At startup (`hooks.server.ts` → `init`) the server opens the database once, which runs the one-time
+layout work: pictures written by older versions move into their chat's folder, rows whose bytes are gone
+are dropped, and every mirror is rewritten.
+
 ## Database
 
 SQLite through `node:sqlite` (no native module, no ORM): `chats`, `messages` (+ `messages_fts`),

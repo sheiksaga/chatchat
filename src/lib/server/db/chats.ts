@@ -11,6 +11,8 @@ export interface ChatRow {
 	updated_at: number;
 	story: string | null;
 	meta: string | null;
+	/** Set when the chat is played with a character card (migration v2). */
+	character_id: string | null;
 }
 
 export interface MessageRow {
@@ -38,7 +40,8 @@ export function createChat(
 		created_at: at,
 		updated_at: at,
 		story: options.story === undefined ? null : JSON.stringify(options.story),
-		meta: options.meta === undefined ? null : JSON.stringify(options.meta)
+		meta: options.meta === undefined ? null : JSON.stringify(options.meta),
+		character_id: null
 	};
 
 	db.prepare(

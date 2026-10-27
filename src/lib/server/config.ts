@@ -51,7 +51,10 @@ export const WORKFLOWS_DIR =
 /** Runtime data: SQLite db, image bytes, server-side provider config. Gitignored. */
 export const DATA_DIR = process.env.CHATCHAT_DATA_DIR ?? path.join(ROOT, 'data');
 
-/** Generated pictures: bytes on disk, metadata rows in SQLite. */
+/** Per-chat folders: `chats/<chatId>/{chat.json, story.json, images/}`. */
+export const CHATS_DIR = path.join(DATA_DIR, 'chats');
+
+/** Pictures that belong to no chat (one-off generations, tests). */
 export const IMAGES_DIR = path.join(DATA_DIR, 'images');
 
 /** Character card avatars (one file per card, named after the card id). */

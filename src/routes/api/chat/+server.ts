@@ -15,6 +15,7 @@ import { STOP_SEQUENCES } from '$lib/server/config.js';
 import { getConfig } from '$lib/server/config-store.js';
 import { activeModelFor, getBackend } from '$lib/server/backends/registry.js';
 import { db } from '$lib/server/db/index.js';
+import { mirrorChat } from '$lib/server/db/layout.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
 import { assemblePrompt } from '$lib/server/prompts/rp.js';
 import {
@@ -95,6 +96,7 @@ export async function POST({ request }: { request: Request }) {
 				if (listMessages(db(), chatId).length === 1) {
 					renameChat(db(), chatId, lastText.replace(/\s+/g, ' ').trim().slice(0, 60));
 				}
+				mirrorChat(db(), chatId);
 			}
 		}
 	}
@@ -179,6 +181,7 @@ export async function POST({ request }: { request: Request }) {
 				);
 				updateMessageContent(db(), regenerateTarget, text);
 				updateMessageMeta(db(), regenerateTarget, stats);
+				mirrorChat(db(), chatId!);
 				return;
 			}
 
@@ -218,6 +221,7 @@ export async function POST({ request }: { request: Request }) {
 			);
 			updateMessageContent(db(), regenerateTarget, partial);
 			updateMessageMeta(db(), regenerateTarget, stats);
+			mirrorChat(db(), chatId!);
 			return;
 		}
 
@@ -229,6 +233,7 @@ export async function POST({ request }: { request: Request }) {
 			meta: stats
 		});
 		saveGeneration(db(), row.id, 0, partial);
+		mirrorChat(db(), chatId!);
 	}
 
 	// The default error text is "An error occurred."; a local app should say what actually broke,

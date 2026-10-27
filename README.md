@@ -6,7 +6,8 @@ account, and the only network traffic it makes is to the model server you point 
 
 - **Local first.** No cloud, no telemetry, no CDN. The browser talks only to this app.
 - **LAN ready.** Start it on the desktop and use it from your phone over the same network (or Tailscale).
-- **Your data stays a file.** Chats live in one SQLite database you can copy or back up.
+- **Your data stays a file.** Every chat is a folder under `data/chats/<id>/` with its transcript,
+  scene state and pictures together — copy `data/` and you have everything.
 - **Keys stay on the server.** Provider API keys live in `data/config.json` and never reach the browser.
 
 ## Start it
@@ -58,6 +59,18 @@ With ComfyUI running (default `http://127.0.0.1:8188`, **start it before llama.c
 
 Pictures live in `data/images/` with their prompt, seed and workflow in the database. If a reply writes
 `[[IMG: …]]`, the transcript shows a button instead of spending GPU time unasked.
+
+## Where your chats live
+
+```
+data/chats/<chat id>/
+  chat.json        the conversation, pretty-printed (with its picture list)
+  story.json       the scene state (where it happens, the look used for images)
+  images/*.png     every picture made in that chat
+```
+
+`data/chatchat.db` is what the app reads; the JSON files are mirrors it rewrites after each change, so
+you can read or grep them at any time, and losing one costs nothing.
 
 ## Characters
 

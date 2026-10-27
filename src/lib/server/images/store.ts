@@ -1,14 +1,15 @@
 /**
  * Image bytes on disk, metadata in SQLite.
  *
- * One file per image, named `<image id>.<ext>`, so a backup is "copy `data/`" and a deleted row can
- * never leave an orphan that another row points at. The id is a UUID, never a user-visible name, so a
- * prompt cannot escape the directory.
+ * A picture lives next to the chat that made it — `data/chats/<chatId>/images/<uuid>.png` — so the
+ * folder for a conversation contains its transcript, its scene state and its pictures. Images with no
+ * chat fall back to `data/images/`. Paths stored in the database are **relative to `data/`**, which
+ * makes the whole folder portable (see `db/layout.ts`).
  */
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { IMAGES_DIR } from '../config.js';
+import { dataPath, imageDirFor } from '../db/layout.js';
 
 const EXTENSIONS: Record<string, string> = {
 	'image/png': 'png',
@@ -16,13 +17,9 @@ const EXTENSIONS: Record<string, string> = {
 	'image/webp': 'webp'
 };
 
+/** Absolute path for a stored relative path (`chats/<id>/images/<uuid>.png`). */
 export function imagePath(file: string): string {
-	// `file` is our own `<uuid>.<ext>`; resolving still guards against a corrupted database row.
-	const resolved = path.resolve(IMAGES_DIR, file);
-	if (!resolved.startsWith(path.resolve(IMAGES_DIR))) {
-		throw new Error(`Refusing to read outside the image directory: ${file}`);
-	}
-	return resolved;
+	return dataPath(file);
 }
 
 export function extensionFor(mime: string): string {
@@ -31,10 +28,18 @@ export function extensionFor(mime: string): string {
 	return extension;
 }
 
-/** Write bytes for an image id. Returns the file name stored in the database. */
-export function writeImageFile(id: string, bytes: Buffer, mime: string): string {
-	fs.mkdirSync(IMAGES_DIR, { recursive: true });
-	const file = `${id}.${extensionFor(mime)}`;
+/**
+ * Write bytes for an image id, inside the chat's folder when there is a chat.
+ * Returns the path stored in the database, relative to `data/`.
+ */
+export function writeImageFile(
+	id: string,
+	bytes: Buffer,
+	mime: string,
+	chatId?: string | null
+): string {
+	const file = `${imageDirFor(chatId)}/${id}.${extensionFor(mime)}`;
+	fs.mkdirSync(path.dirname(imagePath(file)), { recursive: true });
 	fs.writeFileSync(imagePath(file), bytes);
 	return file;
 }

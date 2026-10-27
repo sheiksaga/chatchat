@@ -10,6 +10,7 @@ import { db } from '$lib/server/db/index.js';
 import { getChat, listMessages, setChatStory } from '$lib/server/db/chats.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
 import { buildScenePrompt } from '$lib/server/prompts/scene.js';
+import { mirrorChat } from '$lib/server/db/layout.js';
 
 interface StoryLook {
 	look?: string;
@@ -32,6 +33,7 @@ export async function POST({ request }) {
 	const story = (chat.story ? JSON.parse(chat.story) : {}) as StoryLook;
 	if (body.look !== undefined && body.look !== story.look) {
 		setChatStory(database, chat.id, { ...story, look: body.look });
+		mirrorChat(database, chat.id);
 	}
 
 	const scene = buildScenePrompt({

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { db } from '$lib/server/db/index.js';
 import { deleteChat, getChat, renameChat, setChatStory } from '$lib/server/db/chats.js';
 import { getCharacter, setChatCharacter } from '$lib/server/db/characters.js';
+import { mirrorChat, removeChatDir } from '$lib/server/db/layout.js';
 
 const patchSchema = z.object({
 	title: z.string().trim().min(1).max(200).optional(),
@@ -41,11 +42,13 @@ export async function PATCH({ params, request }) {
 		const current = (chat.story ? JSON.parse(chat.story) : {}) as Record<string, unknown>;
 		setChatStory(db(), params.id, { ...current, ...parsed.data.story });
 	}
+	mirrorChat(db(), params.id);
 	return json({ id: params.id, ...parsed.data });
 }
 
 export function DELETE({ params }) {
 	if (!getChat(db(), params.id)) error(404, 'Chat not found');
 	deleteChat(db(), params.id);
+	removeChatDir(params.id);
 	return json({ id: params.id, deleted: true });
 }

@@ -100,6 +100,8 @@ describe('generateImage', () => {
 		expect(serialised).not.toContain('{{');
 
 		const row = getImage(db(), result.image.id);
+		// The picture lands in the chat's own folder, next to its transcript and story.
+		expect(row?.file).toBe(`chats/${chat.id}/images/${result.image.id}.png`);
 		expect(row?.prompt).toBe('a lighthouse, painterly');
 		expect(row?.workflow).toBe('krea2-t2i');
 		expect(row?.seed).toBe(7);
