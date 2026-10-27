@@ -1,0 +1,1395 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g' cx='38%25' cy='32%25' r='72%25'%3E%3Cstop offset='0%25' stop-color='%23BFE0FF'/%3E%3Cstop offset='35%25' stop-color='%234A8CFF'/%3E%3Cstop offset='75%25' stop-color='%231E3A8A'/%3E%3Cstop offset='100%25' stop-color='%230A1530'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='15' fill='url(%23g)'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <link rel="stylesheet" href="vendor/github-dark.min.css" />
+    <script src="vendor/highlight.min.js"></script>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <!-- The chat folder is loaded over the local API at boot. This overlay is
+         removed by the bootstrap in js/init.js; if the API is missing it
+         explains how to start the server instead of showing an empty app. -->
+    <div
+      class="boot-overlay"
+      id="boot-overlay"
+      role="status"
+      aria-live="polite"
+    >
+      Loading chats…
+    </div>
+    <!-- ══════════════════════════════════════════════════════════════
+         WORLD LAYER
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="world" aria-hidden="true">
+      <div class="world-sky"></div>
+      <div class="world-clouds"></div>
+      <div class="world-haze"></div>
+      <div class="world-mountains-far"></div>
+      <div class="world-mountains-near"></div>
+      <div class="world-rimlight"></div>
+      <div class="world-vignette"></div>
+      <div class="world-overlay"></div>
+    </div>
+
+    <!-- Mobile menu button -->
+    <button
+      class="mobile-menu-btn"
+      onclick="toggleSidebar()"
+      aria-label="Toggle menu"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
+
+    <!-- Sidebar backdrop (mobile/tablet overlay) -->
+    <div
+      class="sidebar-backdrop"
+      id="sidebar-backdrop"
+      onclick="closeSidebar()"
+    ></div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         APP SHELL
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="app-shell">
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <button
+            class="sidebar-toggle"
+            onclick="toggleSidebar()"
+            aria-label="Toggle sidebar"
+            title="Toggle sidebar"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
+        </div>
+
+        <button
+          class="btn-new-chat"
+          onclick="startNewChat()"
+          title="New chat (Ctrl+N)"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+            />
+          </svg>
+          <span>New Chat</span>
+        </button>
+
+        <div class="sidebar-separator"></div>
+
+        <!-- Dynamic chat list -->
+        <div id="sidebar-chat-list"></div>
+
+        <div class="sidebar-spacer"></div>
+
+        <div class="sidebar-io">
+          <button
+            class="btn-sidebar-io"
+            onclick="exportChats()"
+            title="Export all chats to a JSON file (Ctrl+Shift+E)"
+            aria-label="Export all chats"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Export</span>
+          </button>
+          <button
+            class="btn-sidebar-io"
+            onclick="triggerChatImport()"
+            title="Import chats from a JSON file (Ctrl+Shift+I)"
+            aria-label="Import chats"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Import</span>
+          </button>
+        </div>
+        <input
+          type="file"
+          id="chat-import-input"
+          accept=".json"
+          style="display: none"
+          onchange="handleChatImport(this)"
+        />
+
+        <button class="btn-delete-all" onclick="deleteAllChats()">
+          <span class="btn-delete-all-icon" aria-hidden="true">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path
+                d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
+              />
+            </svg>
+          </span>
+          <span class="btn-delete-all-label">Delete All Chats</span>
+        </button>
+      </aside>
+
+      <!-- MAIN PANE -->
+      <main class="main-pane">
+        <!-- TOP BAR -->
+        <div class="top-bar">
+          <div class="top-bar-left">
+            <button
+              class="top-pill"
+              id="model-selector"
+              onclick="openModelSelector()"
+            >
+              <span id="current-model-name">Select Model</span>
+              <span class="pill-chevron"
+                ><svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" /></svg
+              ></span>
+            </button>
+            <button
+              class="top-pill btn-eject hidden"
+              id="btn-eject"
+              onclick="unloadModel()"
+              title="Unload model"
+              aria-label="Unload model"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 9l6 6 6-6" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+                <line x1="5" y1="21" x2="19" y2="21" />
+              </svg>
+            </button>
+            <!-- Model selector dropdown -->
+            <div class="model-dropdown" id="model-dropdown"></div>
+
+            <!-- Image model selector (shown only when a usable image provider
+                 is active — local or cloud) -->
+            <button
+              class="top-pill image-model-pill hidden"
+              id="image-model-selector"
+              onclick="openImageModelSelector()"
+              title="Select image generation model"
+              aria-label="Select image model"
+            >
+              <span class="pill-icon-img"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" /></svg
+              ></span>
+              <span id="current-image-model-name">Image Model</span>
+              <span class="pill-chevron"
+                ><svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" /></svg
+              ></span>
+            </button>
+            <!-- Image model dropdown -->
+            <div class="model-dropdown" id="image-model-dropdown"></div>
+          </div>
+          <div class="top-bar-right">
+            <button
+              class="top-pill top-pill-icon-only"
+              id="help-btn"
+              onclick="openHelp()"
+              title="Setup guide"
+              aria-label="Setup guide"
+            >
+              <span class="pill-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 015.83 1c0 2-3 2-3 4" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" /></svg
+              ></span>
+            </button>
+            <button class="top-pill" id="config-btn" onclick="toggleConfig()">
+              <span class="pill-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path
+                    d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                  /></svg
+              ></span>
+              <span>Configuration</span>
+            </button>
+            <!-- Configuration panel -->
+            <div class="top-bar-settings" id="config-panel">
+              <div class="settings-mode-row">
+                <span class="settings-label">Mode</span>
+                <div
+                  class="config-mode-pills"
+                  role="group"
+                  aria-label="Conversation mode"
+                >
+                  <button
+                    class="mini-pill active"
+                    id="cfg-pill-chat"
+                    onclick="setMode('chat')"
+                    aria-pressed="true"
+                  >
+                    Chat
+                  </button>
+                  <button
+                    class="mini-pill"
+                    id="cfg-pill-story"
+                    onclick="setMode('story')"
+                    aria-pressed="false"
+                  >
+                    Story
+                  </button>
+                  <button
+                    class="mini-pill"
+                    id="cfg-pill-image"
+                    onclick="setMode('image')"
+                    aria-pressed="false"
+                  >
+                    Image
+                  </button>
+                </div>
+              </div>
+              <button
+                class="btn-compress"
+                id="edit-story-btn"
+                onclick="openStorySettings()"
+                style="display: none; margin-top: 0; margin-bottom: var(--s-3)"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="margin-right: 4px"
+                >
+                  <path
+                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                  />
+                  <path
+                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                  />
+                </svg>
+                Edit Story Settings
+              </button>
+
+              <div class="provider-section" id="provider-section-text">
+                <div class="settings-mode-row">
+                  <span class="settings-label">Text Provider</span>
+                </div>
+                <div
+                  class="config-mode-pills provider-row"
+                  id="provider-row-text"
+                  role="group"
+                  aria-label="Text provider"
+                ></div>
+                <div class="provider-detail" id="provider-detail-text"></div>
+                <div
+                  class="story-config-input-group hidden"
+                  id="add-provider-form-text"
+                >
+                  <label class="settings-label" for="add-provider-label-text"
+                    >Provider name</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-label-text"
+                    placeholder="e.g. My Proxy"
+                    autocomplete="off"
+                  />
+                  <label class="settings-label" for="add-provider-baseurl-text"
+                    >Base URL</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-baseurl-text"
+                    placeholder="https://api.example.com/v1"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-label" for="add-provider-key-text"
+                    >API Key</label
+                  >
+                  <input
+                    type="password"
+                    class="story-config-input"
+                    id="add-provider-key-text"
+                    placeholder="Paste your API key (leave blank for a local server)"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-images-text" />
+                    Also supports image generation (OpenAI-compatible)
+                  </label>
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-local-text" />
+                    No API key required (local or LAN server)
+                  </label>
+                  <button
+                    class="btn-compress"
+                    style="margin-top: 8px"
+                    onclick="submitAddProviderForm('text')"
+                    type="button"
+                  >
+                    Add provider
+                  </button>
+                </div>
+              </div>
+
+              <div class="provider-section" id="provider-section-image">
+                <div class="settings-mode-row">
+                  <span class="settings-label">Image Provider</span>
+                </div>
+                <div
+                  class="config-mode-pills provider-row"
+                  id="provider-row-image"
+                  role="group"
+                  aria-label="Image provider"
+                ></div>
+                <div class="provider-detail" id="provider-detail-image"></div>
+                <div
+                  class="story-config-input-group hidden"
+                  id="add-provider-form-image"
+                >
+                  <label class="settings-label" for="add-provider-label-image"
+                    >Provider name</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-label-image"
+                    placeholder="e.g. My Image Proxy"
+                    autocomplete="off"
+                  />
+                  <label class="settings-label" for="add-provider-baseurl-image"
+                    >Base URL</label
+                  >
+                  <input
+                    type="text"
+                    class="story-config-input"
+                    id="add-provider-baseurl-image"
+                    placeholder="http://localhost:10240/v1"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-label" for="add-provider-key-image"
+                    >API Key</label
+                  >
+                  <input
+                    type="password"
+                    class="story-config-input"
+                    id="add-provider-key-image"
+                    placeholder="Paste your API key (leave blank for a local server)"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-chat-image" />
+                    Also supports text chat (OpenAI-compatible)
+                  </label>
+                  <label class="settings-hint provider-form-checkbox">
+                    <input type="checkbox" id="add-provider-local-image" />
+                    No API key required (local or LAN server)
+                  </label>
+                  <button
+                    class="btn-compress"
+                    style="margin-top: 8px"
+                    onclick="submitAddProviderForm('image')"
+                    type="button"
+                  >
+                    Add provider
+                  </button>
+                </div>
+              </div>
+
+              <label class="settings-label" for="system-prompt"
+                >System Prompt / Persona</label
+              >
+              <textarea
+                class="settings-textarea"
+                id="system-prompt"
+                placeholder="Enter system prompt..."
+              ></textarea>
+
+              <div class="settings-slider-row">
+                <label for="temperature">Temperature</label>
+                <input
+                  type="range"
+                  id="temperature"
+                  min="0.1"
+                  max="2.0"
+                  step="0.01"
+                  value="0.7"
+                />
+                <span class="settings-slider-val" id="temp-value">0.7</span>
+              </div>
+              <div class="settings-slider-row">
+                <label for="repetition-penalty">Rep. Penalty</label>
+                <input
+                  type="range"
+                  id="repetition-penalty"
+                  min="1.0"
+                  max="2.0"
+                  step="0.01"
+                  value="1.1"
+                />
+                <span class="settings-slider-val" id="rep-value">1.1</span>
+              </div>
+              <button
+                class="btn-compress"
+                id="compress-btn"
+                onclick="compressHistory()"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="margin-right: 4px"
+                >
+                  <path d="M12 2v10M12 22v-8M20 12H4" />
+                </svg>
+                Compress Conversation
+              </button>
+
+              <div class="settings-label" style="margin-top: var(--s-2)">
+                Appearance
+              </div>
+              <div class="settings-slider-row">
+                <label for="pref-width">Message width</label>
+                <input
+                  type="range"
+                  id="pref-width"
+                  min="520"
+                  max="1080"
+                  step="20"
+                  value="720"
+                />
+                <span class="settings-slider-val" id="pref-width-val">720</span>
+              </div>
+              <div class="settings-slider-row">
+                <label for="pref-font">Font size</label>
+                <input
+                  type="range"
+                  id="pref-font"
+                  min="13"
+                  max="20"
+                  step="1"
+                  value="15"
+                />
+                <span class="settings-slider-val" id="pref-font-val">15</span>
+              </div>
+              <button
+                class="btn-add-char"
+                id="pref-reset"
+                onclick="resetAppearancePrefs()"
+                style="align-self: flex-start"
+              >
+                Reset appearance
+              </button>
+
+              <div class="settings-shortcuts">
+                <span class="settings-label">Keyboard Shortcuts</span>
+                <ul>
+                  <li><span>New chat</span> <kbd>Ctrl+N</kbd></li>
+                  <li><span>Export chats</span> <kbd>Ctrl+Shift+E</kbd></li>
+                  <li><span>Import chats</span> <kbd>Ctrl+Shift+I</kbd></li>
+                  <li>
+                    <span>Export story config</span> <kbd>Ctrl+Shift+S</kbd>
+                  </li>
+                  <li>
+                    <span>Import story config</span> <kbd>Ctrl+Shift+L</kbd>
+                  </li>
+                  <li><span>Send message</span> <kbd>Enter</kbd></li>
+                  <li><span>New line</span> <kbd>Shift+Enter</kbd></li>
+                  <li><span>Close panel</span> <kbd>Esc</kbd></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HERO REGION (shown when no chat) -->
+        <div class="hero-region" id="hero-region">
+          <div class="orb" aria-hidden="true"></div>
+          <div class="quick-actions" id="mode-pills">
+            <button
+              class="quick-chip active"
+              id="pill-chat-mode"
+              onclick="setMode('chat')"
+              aria-pressed="true"
+            >
+              <span class="quick-chip-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                  /></svg
+              ></span>
+              Chat Mode
+            </button>
+            <button
+              class="quick-chip"
+              id="pill-story-mode"
+              onclick="setMode('story')"
+              aria-pressed="false"
+            >
+              <span class="quick-chip-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                  <path
+                    d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"
+                  /></svg
+              ></span>
+              Story Mode
+            </button>
+            <button
+              class="quick-chip"
+              id="pill-image-mode"
+              onclick="setMode('image')"
+              aria-pressed="false"
+            >
+              <span class="quick-chip-icon"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" /></svg
+              ></span>
+              Image Mode
+            </button>
+          </div>
+
+          <!-- Story config (hidden in chat mode) -->
+          <div class="story-config hidden" id="story-config">
+            <div class="story-section-label">Style</div>
+            <div
+              class="config-mode-pills story-style-pills"
+              role="group"
+              aria-label="Story style"
+            >
+              <button
+                type="button"
+                class="mini-pill active"
+                id="style-pill-cyoa"
+                onclick="setStoryStyle('cyoa')"
+                aria-pressed="true"
+                title="Narrated in second person. Every reply ends with 2-3 numbered choices to pick from."
+              >
+                Adventure
+              </button>
+              <button
+                type="button"
+                class="mini-pill"
+                id="style-pill-roleplay"
+                onclick="setStoryStyle('roleplay')"
+                aria-pressed="false"
+                title="The AI plays your lead character and any NPCs, and sets the scene. Direct the story from outside or speak/act in character yourself — no numbered choices."
+              >
+                Roleplay
+              </button>
+              <button
+                type="button"
+                class="mini-pill"
+                id="style-pill-gm"
+                onclick="setStoryStyle('gm')"
+                aria-pressed="false"
+                title="The AI runs the scene like a tabletop game master, narrating outcomes and consequences for what you attempt — no numbered choices."
+              >
+                Game Master
+              </button>
+            </div>
+
+            <!-- Narration voice (roleplay style only) -->
+            <div
+              class="config-mode-pills story-narration-pills hidden"
+              id="story-narration-pills"
+              role="group"
+              aria-label="Narration voice"
+            >
+              <button
+                type="button"
+                class="mini-pill active"
+                id="narration-pill-first"
+                onclick="setStoryNarration('first')"
+                aria-pressed="true"
+                title="Your lead character speaks and acts as “I”."
+              >
+                First Person
+              </button>
+              <button
+                type="button"
+                class="mini-pill"
+                id="narration-pill-third"
+                onclick="setStoryNarration('third')"
+                aria-pressed="false"
+                title="Your lead character is narrated by name/pronoun, like a novel."
+              >
+                Third Person
+              </button>
+            </div>
+
+            <!-- Character cast (roleplay style) -->
+            <div class="story-cast hidden" id="story-cast">
+              <div class="story-section-label">
+                Cast
+                <span class="story-label-hint"
+                  >the first card is the lead — its voice the AI writes in</span
+                >
+              </div>
+              <div class="cast-grid" id="cast-grid"></div>
+              <div class="cast-empty" id="cast-empty">
+                No character cards yet. Import a SillyTavern card, or write one
+                from scratch.
+              </div>
+              <div class="cast-empty hidden" id="cast-none-cast">
+                Nobody is in this story yet — add a character below.
+              </div>
+              <!-- Library cards that are not in the cast. Populated by
+                   renderCastPicker() and revealed by the button underneath, so
+                   that the CAST list itself only ever shows the cast. -->
+              <div class="cast-add-picker hidden" id="cast-add-picker"></div>
+              <div class="cast-actions">
+                <button
+                  type="button"
+                  class="quick-chip story-default-pill"
+                  id="cast-add-btn"
+                  onclick="toggleCastAddPicker()"
+                  aria-expanded="false"
+                  aria-controls="cast-add-picker"
+                  title="Add a card from your library to this story"
+                >
+                  <span class="quick-chip-icon">&#x2B;</span> Add to Cast
+                </button>
+                <button
+                  type="button"
+                  class="quick-chip story-default-pill"
+                  onclick="openCardEditor()"
+                >
+                  <span class="quick-chip-icon">&#x1F464;</span> New Character
+                </button>
+                <button
+                  type="button"
+                  class="quick-chip story-default-pill"
+                  onclick="triggerCardImport()"
+                  title="Import SillyTavern .png / .json character cards"
+                >
+                  <span class="quick-chip-icon">&#x1F4E5;</span> Import Cards
+                </button>
+                <input
+                  type="file"
+                  id="card-import-input"
+                  accept=".png,.json,image/png,application/json"
+                  multiple
+                  style="display: none"
+                  onchange="handleCardImport(this)"
+                />
+              </div>
+
+              <div class="story-section-label">You</div>
+              <input
+                type="text"
+                class="story-config-input"
+                id="cast-user-name"
+                placeholder="Your name — replaces {{user}}"
+              />
+              <textarea
+                class="story-first-prompt cast-user-persona"
+                id="cast-user-persona"
+                placeholder="Describe yourself, so the character knows who they are talking to."
+              ></textarea>
+            </div>
+
+            <!-- Use Default pill -->
+            <div class="story-default-wrapper" id="story-default-wrapper">
+              <button
+                class="quick-chip story-default-pill"
+                id="story-default-pill"
+                onclick="useDefaultStory()"
+              >
+                <span class="quick-chip-icon">&#x2728;</span> Use Default
+              </button>
+              <button
+                class="quick-chip story-default-pill"
+                id="story-generate-pill"
+                onclick="generateStory()"
+                title="Fill the form with an AI-generated story"
+              >
+                <span class="quick-chip-icon">&#x1F3B2;</span> Generate
+              </button>
+            </div>
+
+            <div class="story-section-label">Opening Scene</div>
+            <input
+              type="text"
+              class="story-config-input"
+              id="story-scene"
+              placeholder="A dark forest, a spaceship bridge, a medieval tavern..."
+            />
+
+            <div class="story-section-label">Tags</div>
+            <input
+              type="text"
+              class="story-config-input"
+              id="story-tags"
+              placeholder="fantasy, mystery, horror, sci-fi, romance..."
+            />
+
+            <div class="story-section-label">First Prompt</div>
+            <textarea
+              class="story-first-prompt"
+              id="story-first-prompt"
+              placeholder="Describe the opening scene and present the first choices for the player."
+            ></textarea>
+
+            <!-- The live story file for this chat. A model writes it, so a model
+                 gets it wrong sometimes; this is where a wrong detail is caught
+                 before it is baked into every later image. -->
+            <div class="story-file hidden" id="story-file">
+              <div class="story-section-label">
+                Story file
+                <span class="story-label-hint" id="story-file-status"></span>
+              </div>
+              <div id="story-file-body"></div>
+            </div>
+
+            <!-- Export/Import bar -->
+            <div class="story-action-bar">
+              <button
+                class="btn-story-action"
+                onclick="exportStoryConfig('json')"
+                title="Export as JSON"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export JSON
+              </button>
+              <button
+                class="btn-story-action"
+                onclick="exportStoryConfig('txt')"
+                title="Export as text"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                Export Text
+              </button>
+              <button
+                class="btn-story-action"
+                onclick="triggerStoryImport()"
+                title="Import story config"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Import
+              </button>
+            </div>
+            <input
+              type="file"
+              id="story-import-input"
+              accept=".json,.txt"
+              style="display: none"
+              onchange="handleStoryImport(this)"
+            />
+          </div>
+
+          <!-- Prompt starter chips (chat mode only) -->
+          <div class="prompt-chips" id="prompt-chips">
+            <button class="prompt-chip" onclick="usePromptChip(this)">
+              Help me write something
+            </button>
+            <button class="prompt-chip" onclick="usePromptChip(this)">
+              Explain a tricky concept
+            </button>
+            <button class="prompt-chip" onclick="usePromptChip(this)">
+              Review my code
+            </button>
+            <button class="prompt-chip" onclick="usePromptChip(this)">
+              Brainstorm ideas with me
+            </button>
+            <!-- Image commands: /img draws fresh from your words, /edit changes
+                 the most recent picture (FLUX.2 Klein instruction editing). -->
+            <button
+              class="prompt-chip"
+              onclick="usePromptChip(this)"
+              data-prompt="/img "
+              title="Draw a new picture from your words"
+            >
+              /img — draw a picture
+            </button>
+            <button
+              class="prompt-chip"
+              onclick="usePromptChip(this)"
+              data-prompt="/edit "
+              title="Change the most recent picture: /edit make her hair red"
+            >
+              /edit — change the last picture
+            </button>
+          </div>
+
+          <div
+            class="gen-stats hidden"
+            id="hero-gen-stats"
+            aria-live="polite"
+          ></div>
+
+          <div class="hero-input-wrapper">
+            <!-- One bordered surface: the field and its actions live inside it,
+                 mirroring the settings-panel composer in the reference design. -->
+            <div class="hero-input" id="hero-input-box">
+              <textarea
+                class="hero-input-textarea"
+                id="hero-input-text"
+                rows="1"
+                placeholder="Ask anything…"
+              ></textarea>
+              <div class="composer-actions">
+                <button
+                  class="btn-send hero-send-btn btn-send-icon"
+                  id="hero-send-btn"
+                  onclick="sendHeroMessage()"
+                  title="Send"
+                  aria-label="Send message"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 19V5" />
+                    <path d="m5 12 7-7 7 7" />
+                  </svg>
+                  <span class="btn-send-label">Send</span>
+                </button>
+                <button
+                  class="btn-stop hidden"
+                  id="hero-stop-btn"
+                  onclick="stopGeneration()"
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                  >
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CHAT MESSAGES AREA (shown when chatting) -->
+        <div class="messages-area hidden" id="messages"></div>
+
+        <!-- CHAT INPUT BAR (shown when chatting) -->
+        <div class="chat-input-bar hidden" id="chat-input-bar">
+          <div
+            class="gen-stats hidden"
+            id="chat-gen-stats"
+            aria-live="polite"
+          ></div>
+          <div class="chat-input-box">
+            <textarea id="chat-input" placeholder="Message" rows="1"></textarea>
+            <div class="chat-input-actions composer-actions">
+              <!-- The scene record image prompts are built from. A document
+                   icon rather than a settings entry because it is a
+                   troubleshooting tool: open it when a picture is wrong. -->
+              <button
+                type="button"
+                class="btn-scene-json"
+                id="chat-scene-json-btn"
+                onclick="openSceneJsonEditor()"
+                title="Scene record (JSON) — what image prompts are built from"
+                aria-label="Edit scene record JSON"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="14" y2="17" />
+                </svg>
+              </button>
+              <button
+                class="btn-send btn-send-icon"
+                id="chat-send-btn"
+                onclick="sendChatMessage()"
+                title="Send"
+                aria-label="Send message"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 19V5" />
+                  <path d="m5 12 7-7 7 7" />
+                </svg>
+                <span class="btn-send-label">Send</span>
+              </button>
+              <button
+                class="btn-stop hidden"
+                id="chat-stop-btn"
+                onclick="stopGeneration()"
+                title="Stop generating"
+                aria-label="Stop generating"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  stroke="none"
+                >
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div
+      id="toast-container"
+      class="toast-container"
+      aria-live="assertive"
+    ></div>
+    <!-- Action toasts (e.g. Undo) surface at top-center where the eye lands -->
+    <div
+      id="toast-top-container"
+      class="toast-top-container"
+      aria-live="assertive"
+    ></div>
+    <!-- Screen-reader announcer: completed assistant responses only (not per-token spam) -->
+    <div
+      id="sr-announcer"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <!-- Character card editor -->
+    <div class="card-editor-overlay hidden" id="card-editor-overlay">
+      <div
+        class="card-editor"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="card-editor-title"
+      >
+        <div class="card-editor-head">
+          <h3 id="card-editor-title">New Character</h3>
+          <button
+            type="button"
+            class="btn-close"
+            onclick="closeCardEditor()"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="card-editor-body">
+          <div class="card-editor-avatar">
+            <img id="card-editor-avatar-img" class="hidden" alt="" />
+            <button
+              type="button"
+              class="btn-story-action"
+              onclick="document.getElementById('card-avatar-input').click()"
+            >
+              Choose image
+            </button>
+            <input
+              type="file"
+              id="card-avatar-input"
+              accept="image/*"
+              style="display: none"
+              onchange="handleCardAvatarPick(this)"
+            />
+          </div>
+
+          <div class="card-editor-fields">
+            <label class="ce-label" for="ce-name">Name</label>
+            <input type="text" class="story-config-input" id="ce-name" />
+
+            <label class="ce-label" for="ce-description">Description</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-description"
+              placeholder="Who they are: appearance, history, how they speak."
+            ></textarea>
+
+            <label class="ce-label" for="ce-personality">Personality</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-personality"
+            ></textarea>
+
+            <label class="ce-label" for="ce-scenario">Scenario</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-scenario"
+            ></textarea>
+
+            <label class="ce-label" for="ce-first-mes">First message</label>
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-first-mes"
+              placeholder="The opening scene, written in the character's voice."
+            ></textarea>
+
+            <label class="ce-label" for="ce-alt-greetings"
+              >Alternate greetings
+              <span class="ce-hint">one per line</span></label
+            >
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-alt-greetings"
+            ></textarea>
+
+            <label class="ce-label" for="ce-mes-example"
+              >Example dialogue
+              <span class="ce-hint"
+                >separate turns with &lt;START&gt;</span
+              ></label
+            >
+            <textarea
+              class="story-first-prompt ce-short"
+              id="ce-mes-example"
+            ></textarea>
+
+            <details class="ce-advanced">
+              <summary>Advanced</summary>
+
+              <label class="ce-label" for="ce-appearance">Appearance</label>
+              <textarea
+                class="story-first-prompt ce-short"
+                id="ce-appearance"
+                placeholder="hair, eyes, build, species — physical traits only"
+              ></textarea>
+
+              <label class="ce-label" for="ce-system-prompt"
+                >System prompt override</label
+              >
+              <textarea
+                class="story-first-prompt ce-short"
+                id="ce-system-prompt"
+              ></textarea>
+
+              <label class="ce-label" for="ce-post-history"
+                >Post-history instructions</label
+              >
+              <textarea
+                class="story-first-prompt ce-short"
+                id="ce-post-history"
+              ></textarea>
+
+              <label class="ce-label" for="ce-tags"
+                >Tags <span class="ce-hint">comma separated</span></label
+              >
+              <input type="text" class="story-config-input" id="ce-tags" />
+            </details>
+
+            <pre
+              class="card-editor-preview hidden"
+              id="card-editor-preview"
+            ></pre>
+          </div>
+        </div>
+
+        <div class="card-editor-foot">
+          <button
+            type="button"
+            class="btn-story-action hidden"
+            id="card-editor-delete"
+            onclick="deleteEditingCard()"
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            class="btn-story-action"
+            onclick="previewCardPrompt()"
+          >
+            Preview prompt
+          </button>
+          <button
+            type="button"
+            class="quick-chip active"
+            onclick="saveCardEditor()"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+    <script src="js/state.js"></script>
+    <!-- Folder-backed chat storage. Loaded immediately after state.js so the
+         safeGetJSON/safeSetItem wrappers can route chat_* keys to the local
+         API instead of localStorage. -->
+    <script src="js/chatstore.js"></script>
+    <script src="workflows/workflows.js"></script>
+    <!-- Generated by tools/sync-cards.js. Must load before js/cards.js, which
+         reads window.CHATCHAT_CARDS to build the card library. Without this tag
+         the synced cards simply do not exist at runtime. -->
+    <script src="cards/cards.js"></script>
+    <script src="js/dom.js"></script>
+    <script src="js/cards.js"></script>
+    <script src="js/view.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/models.js"></script>
+    <script src="js/imagemodels.js"></script>
+    <script src="js/imagestore.js"></script>
+    <script src="js/storyfile.js"></script>
+    <script src="js/sceneprompt.js"></script>
+    <script src="js/comfy.js"></script>
+    <script src="js/images.js"></script>
+    <script src="js/imageview.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/help.js"></script>
+    <script src="js/chatlist.js"></script>
+    <script src="js/rp.js"></script>
+    <script src="js/messages.js"></script>
+    <script src="js/cardeditor.js"></script>
+    <script src="js/generations.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/hero.js"></script>
+    <script src="js/init.js"></script>
+    <!-- After init.js: this module owns the composer's height and width, so its
+         input listener must run last and win over initTextareaAutoResize(). -->
+    <script src="js/composer.js"></script>
+  </body>
+</html>

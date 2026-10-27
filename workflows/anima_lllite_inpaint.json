@@ -1,0 +1,194 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "{{MODEL}}",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "{{CLIP}}",
+      "type": "{{CLIP_TYPE}}",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "{{VAE}}"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "4": {
+    "inputs": {
+      "image": "{{INIT_IMAGE}}",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Source Image ({{WIDTH}}x{{HEIGHT}})"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "{{MASK_IMAGE}}",
+      "channel": "red",
+      "upload": "image"
+    },
+    "class_type": "LoadImageMask",
+    "_meta": {
+      "title": "Load Mask (red channel)"
+    }
+  },
+  "6": {
+    "inputs": {
+      "name": "{{MODEL_PATCH}}"
+    },
+    "class_type": "ModelPatchLoader",
+    "_meta": {
+      "title": "Load Model Patch (LLLite)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "model_patch": [
+        "6",
+        0
+      ],
+      "image": [
+        "4",
+        0
+      ],
+      "mask": [
+        "5",
+        0
+      ],
+      "strength": 1.0,
+      "start_percent": 0.0,
+      "end_percent": 1.0
+    },
+    "class_type": "AnimaLLLiteApply",
+    "_meta": {
+      "title": "Anima LLLite Apply"
+    }
+  },
+  "8": {
+    "inputs": {
+      "text": "{{INSTRUCTION}}",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Instruction)"
+    }
+  },
+  "9": {
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "Conditioning Zero Out (negative — no negative text)"
+    }
+  },
+  "10": {
+    "inputs": {
+      "pixels": [
+        "4",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "mask": [
+        "5",
+        0
+      ],
+      "grow_mask_by": 6
+    },
+    "class_type": "VAEEncodeForInpaint",
+    "_meta": {
+      "title": "VAE Encode For Inpaint"
+    }
+  },
+  "11": {
+    "inputs": {
+      "seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "model": [
+        "7",
+        0
+      ],
+      "positive": [
+        "8",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "latent_image": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "12": {
+    "inputs": {
+      "samples": [
+        "11",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "13": {
+    "inputs": {
+      "filename_prefix": "AnimaInpaint",
+      "images": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

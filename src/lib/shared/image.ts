@@ -1,0 +1,90 @@
+/**
+ * Turning text into images: the marker syntax the model writes, and the `/image` command the user types.
+ *
+ * **Shared** code (no I/O, no server imports): the browser needs the same grammar to offer "make this
+ * image" buttons under a reply, and the tests need it without a GPU.
+ *
+ * Grammar: `[[IMG: prompt | AR | SHOT | SEED]]`
+ *   prompt  free text; commas are tags, exactly like an SD prompt
+ *   AR      optional `WxH` (`832x1216`), else the model default
+ *   SHOT    optional camera/quality tag, appended to the prompt
+ *   SEED    optional integer; `-1` or absent means random
+ */
+export interface ImageRequest {
+	prompt: string;
+	width?: number;
+	height?: number;
+	seed?: number;
+}
+
+/** Aspect ratios the UI offers; the marker accepts any `WxH`. */
+export const SIZE_PRESETS = [
+	{ label: 'Square', value: '1024x1024', width: 1024, height: 1024 },
+	{ label: 'Portrait', value: '832x1216', width: 832, height: 1216 },
+	{ label: 'Landscape', value: '1216x832', width: 1216, height: 832 },
+	{ label: 'Wide', value: '1344x768', width: 1344, height: 768 }
+] as const;
+
+const MARKER = /\[\[\s*IMG\s*:([^\]]*)\]\]/gi;
+
+/** Parse one marker body. Never throws: a half-broken marker yields null instead of killing a reply. */
+export function parseMarkerBody(body: string, defaults: { width?: number; height?: number } = {}) {
+	const [rawPrompt, rawSize, rawShot, rawSeed] = body.split('|').map((part) => part.trim());
+	const prompt = [rawPrompt, rawShot].filter(Boolean).join(', ');
+	if (!prompt) return null;
+
+	let width = defaults.width;
+	let height = defaults.height;
+	const size = rawSize?.match(/^(\d{2,5})\s*[x×]\s*(\d{2,5})$/i);
+	if (size) {
+		width = clampSize(Number(size[1]));
+		height = clampSize(Number(size[2]));
+	}
+
+	const seed = rawSeed && /^-?\d+$/.test(rawSeed) ? Number(rawSeed) : undefined;
+
+	return { prompt, width, height, seed: seed !== undefined && seed >= 0 ? seed : undefined };
+}
+
+/** ComfyUI will happily try to allocate a 9000 px image; keep it inside what an 8 GB card can do. */
+function clampSize(value: number): number {
+	return Math.min(2048, Math.max(256, Math.round(value / 64) * 64));
+}
+
+/** Every image marker in a reply, in order. */
+export function findImageMarkers(
+	text: string,
+	defaults: { width?: number; height?: number } = {}
+): Array<NonNullable<ReturnType<typeof parseMarkerBody>>> {
+	const found: Array<NonNullable<ReturnType<typeof parseMarkerBody>>> = [];
+	for (const match of text.matchAll(MARKER)) {
+		const parsed = parseMarkerBody(match[1], defaults);
+		if (parsed) found.push(parsed);
+	}
+	return found;
+}
+
+/** Strip markers so the transcript does not show the machinery. */
+export function stripImageMarkers(text: string): string {
+	return text
+		.replace(MARKER, '')
+		.replace(/[ \t]+\n/g, '\n')
+		.trim();
+}
+
+/**
+ * `/image a moonlit harbour, lighthouse beam` → a request. Returns null for any other message, so the
+ * composer can call this on every send without thinking about it.
+ */
+export function parseImageCommand(text: string): ImageRequest | null {
+	const match = text.match(/^\s*\/image\b\s*([\s\S]*)$/i);
+	if (!match) return null;
+	const prompt = match[1].trim();
+	if (!prompt) return null;
+	return { prompt };
+}
+
+/** A stable seed for "regenerate": same prompt, different picture. */
+export function randomSeed(): number {
+	return Math.floor(Math.random() * 2 ** 31);
+}
