@@ -108,7 +108,7 @@ src/lib/components/    chat/, cards/, image/, settings/, ui/ (shadcn copies)
 src/app.css            Tailwind 4 + shadcn theme tokens
 components.json        shadcn-svelte config (baseColor: zinc)
 data/                  runtime data (gitignored): chatchat.db, images/, cards/, config.json
-legacy/                the pre-rewrite app — READ ONLY reference for porting behaviour
+docs/                  ARCHITECTURE, PARITY (legacy → rewrite), DEPS, TROUBLESHOOTING, UI
 _notes/                PLAN.md, TODO.md, REWRITE_RESEARCH.md, model notes
 ```
 
@@ -148,13 +148,21 @@ _notes/                PLAN.md, TODO.md, REWRITE_RESEARCH.md, model notes
 - Windows: `pkill` does not kill node.exe. `netstat -ano` → `taskkill //PID <pid> //F`. A stale server on the test
   port serves an old build and will make a good build look broken.
 
-## Porting from `legacy/`
+## Looking at the pre-rewrite app
 
-`legacy/js/*.js` is the behavioural source of truth for anything that already works. When porting, read the legacy
-file, write the TypeScript version, and **write a test that encodes the legacy behaviour** before wiring the UI.
-Useful starts: `legacy/js/rp.js` (prompt assembly), `legacy/js/comfy.js` (ComfyUI quirks: `/object_info/<node>`,
-history polling, `/upload/image`), `legacy/js/cards.js` (PNG tEXt parsing — now replaced by the card-reader lib),
-`legacy/js/sceneprompt.js` (scene → image prompt), `legacy/js/generations.js` (response cycling).
+`legacy/` was **deleted on 2026-10-27**; the code is still in git history and the rewrite is the only
+implementation. Read it only when a parity question is genuinely open:
+
+```bash
+git show 2499e95:js/rp.js            # prompt assembly
+git show 2499e95:js/comfy.js         # ComfyUI quirks (history polling, /upload/image)
+git show 2499e95:js/sceneprompt.js   # scene → image prompt
+git ls-tree -r --name-only 2499e95   # the full old tree
+```
+
+Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prompts/scene.spec.ts`,
+`backends/llm/*.spec.ts`, `db/import-legacy.spec.ts`. Importing old data still works — point
+`npm run import:legacy -- --from <dir>` and `CHATCHAT_LEGACY_DIR=<dir> npm run import:cards` at a copy.
 
 ## Banned patterns (each one caused bugs in the old codebase)
 

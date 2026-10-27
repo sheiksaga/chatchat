@@ -2,7 +2,7 @@
 /**
  * CLI wrapper around `src/lib/server/db/import-legacy.ts`.
  *
- *   npm run import:legacy                 # reads legacy/chats
+ *   npm run import:legacy -- --from C:/backup/old-app/chats   # the old folder (legacy/ was deleted)
  *   npm run import:legacy -- --from /path/to/chats --to data/chatchat.db
  *
  * Run with `tsx` (dev dependency) so this file can import the TypeScript repository modules

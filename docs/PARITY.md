@@ -1,8 +1,8 @@
 # Parity checklist (legacy → rewrite)
 
-`legacy/` holds the pre-rewrite app. Copy behaviour from there, not from memory: each row names the
-file that implements it today. Tick a row only when the rewrite does the same thing **and** a test
-covers it.
+Each row names the file that implements the feature today. The **legacy source column is history**: the
+`legacy/` folder was deleted on 2026-10-27, and the pre-rewrite code lives in git (`git show 2499e95:js/api.js`).
+Tick a row only when the rewrite does the same thing **and** a test covers it.
 
 | Feature                                                        | Legacy source                               | Status                                                                       |
 | -------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------- |

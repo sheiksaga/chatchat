@@ -10,7 +10,6 @@ bun.lockb
 
 # The pre-rewrite app, kept for reference only — never reformat it, it would destroy the diff
 # between it and the rewrite for anyone comparing the two.
-/legacy/
 
 # ComfyUI API graphs and the generated manifest are machine output, not source.
 /workflows/

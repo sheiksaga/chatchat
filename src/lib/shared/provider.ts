@@ -149,14 +149,5 @@ export const PROVIDER_TEMPLATES = [
 		isLocal: false,
 		chat: true,
 		images: false
-	},
-	{
-		id: 'nanogpt',
-		label: 'NanoGPT',
-		kind: 'openai',
-		baseUrl: 'https://nano-gpt.com/api/v1',
-		isLocal: false,
-		chat: true,
-		images: true
 	}
 ] as const satisfies ReadonlyArray<Omit<Provider, 'apiKey' | 'headers'> & { readonly id: string }>;

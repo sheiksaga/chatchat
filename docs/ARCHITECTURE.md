@@ -22,7 +22,6 @@ almost every file:
 | `_notes/`             | research, plan, living TODO (not part of the app)                                  |
 | `data/`               | runtime data — SQLite, images, card avatars, provider keys (gitignored)            |
 | `workflows/`          | ComfyUI API graphs                                                                 |
-| `legacy/`             | the pre-rewrite app, read-only reference until `docs/PARITY.md` is done            |
 
 ## Request lifecycle (a chat message)
 

@@ -12,7 +12,7 @@ export default defineConfig(
 	includeIgnoreFile(gitignorePath),
 	// The pre-rewrite app is reference material, not source: linting it would produce thousands of
 	// findings nobody intends to fix, which would train everyone to ignore lint output.
-	{ ignores: ['legacy/**', 'workflows/**', 'data/**'] },
+	{ ignores: ['workflows/**', 'data/**'] },
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,

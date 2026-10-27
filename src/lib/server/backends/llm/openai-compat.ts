@@ -1,5 +1,5 @@
 /**
- * Any OpenAI-compatible chat endpoint: OpenAI itself, OpenRouter, NanoGPT, and the long tail of
+ * Any OpenAI-compatible chat endpoint: OpenAI itself, OpenRouter, and the long tail of
  * self-hosted proxies. Speaks exactly the OpenAI schema — no llama.cpp extensions.
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
