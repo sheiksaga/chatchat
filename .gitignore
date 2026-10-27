@@ -42,3 +42,5 @@ legacy/*.log
 .e2e-data/
 # release zips
 /dist/
+# local working notes: research, plan, TODO — not part of the app
+/_notes/
