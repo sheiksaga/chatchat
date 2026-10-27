@@ -201,3 +201,8 @@ Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prom
   mirrors). It runs from the `init` hook, so `data/` is correct before the first request.
 - Tests get their own scratch `data/` from `vitest.setup.ts`. Do not remove it: without it a test that
   calls `db()` writes into the developer's real chats.
+- `npx playwright test` **rebuilds `build/`** (its webServer command is `npm run build && node build`).
+  A long-lived `node build` on another port then answers 500 with `ERR_MODULE_NOT_FOUND: ...chunks/...`
+  because its manifest describes the previous build. Restart the app after running e2e.
+- A diffusion prompt has no negation: `no cloak` adds a cloak. `prompts/scene.ts#dropNegations` strips
+  those phrases; the correct way to remove something is an inpaint or a negative prompt in the graph.
