@@ -47,6 +47,9 @@ export const actions: Actions = {
 			renameChat(db(), chat.id, character.name);
 		}
 
+		// Create the chat's folder now, not on its first message: an empty new chat should already be
+		// visible in data/chats/ with its chat.json and story.json.
+		mirrorChat(db(), chat.id);
 		redirect(303, `/chat/${chat.id}`);
 	}
 };

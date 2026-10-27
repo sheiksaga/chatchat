@@ -22,6 +22,7 @@ export async function POST({ request }) {
 		shot?: 'wide' | 'medium' | 'close';
 		extra?: string;
 		look?: string;
+		workflow?: string;
 	} | null;
 	if (!body?.chatId) return json({ error: 'chatId is required' }, { status: 400 });
 
@@ -47,5 +48,5 @@ export async function POST({ request }) {
 		extra: body.extra
 	});
 
-	return json(scene);
+	return json({ ...scene, workflow: body.workflow });
 }

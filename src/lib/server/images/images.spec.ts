@@ -116,6 +116,21 @@ describe('generateImage', () => {
 		expect(progress).toEqual([]);
 	});
 
+	it('uses the workflow the caller picked, not the default', async () => {
+		const result = await generateImage({
+			prompt: 'an anime forest',
+			workflow: 'anima-turbo-t2i',
+			comfyUrl: comfy.url
+		});
+		const graph = comfy.queued.at(-1)?.graph as Record<string, { inputs: Record<string, unknown> }>;
+		const serialised = JSON.stringify(graph);
+
+		// The image-model picker only works if the chosen graph's own model file is what gets queued.
+		expect(serialised).toContain('anima-turbo-v1.1-int8convrot.safetensors');
+		expect(serialised).not.toContain('krea2_turbo');
+		expect(result.image.workflow).toBe('anima-turbo-t2i');
+	});
+
 	it('rejects a non-image workflow before touching ComfyUI', async () => {
 		await expect(
 			generateImage({ prompt: 'x', workflow: 'anima-inpaint', comfyUrl: comfy.url })

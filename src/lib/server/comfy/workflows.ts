@@ -138,12 +138,61 @@ export const ANIMA_INPAINT_DEFAULTS: GraphValues = {
 	SEED: 1
 };
 
+/**
+ * Anima Turbo T2I — the light anime model (2 GB int8). Same distilled recipe as the inpaint graph:
+ * 8 steps, CFG 1, euler/simple, so the two share a CLIP (`qwen_3_06b_base`) and VAE.
+ */
+export const ANIMA_TURBO_DEFAULTS: GraphValues = {
+	MODEL: 'anima-turbo-v1.1-int8convrot.safetensors',
+	CLIP: 'qwen_3_06b_base.safetensors',
+	CLIP_TYPE: 'stable_diffusion',
+	VAE: 'qwen_image_vae.safetensors',
+	SAMPLER: 'euler',
+	SCHEDULER: 'simple',
+	STEPS: 8,
+	CFG: 1,
+	WIDTH: 832,
+	HEIGHT: 1216,
+	SEED: 1,
+	FILENAME_PREFIX: 'AnimaTurbo'
+};
+
+/**
+ * FLUX.2 Klein 4B — guidance-distilled (4 steps, CFG 1). The CLIP is the 2.3 GB GGUF quant on purpose:
+ * the full `qwen_3_4b` safetensors is 7.5 GB, which does not sit beside a resident LLM on an 8 GB card.
+ */
+export const FLUX2_KLEIN_DEFAULTS: GraphValues = {
+	MODEL: 'flux-2-klein-4b-fp8.safetensors',
+	CLIP: 'flux2-klein-4b-uncensored-q4_k_m.gguf',
+	CLIP_TYPE: 'flux2',
+	VAE: 'flux2-vae.safetensors',
+	SAMPLER: 'euler',
+	STEPS: 4,
+	CFG: 1,
+	WIDTH: 1024,
+	HEIGHT: 1024,
+	SEED: 1,
+	FILENAME_PREFIX: 'Flux2Klein'
+};
+
 export const GRAPHS = {
 	'krea2-t2i': {
 		file: 'krea2_turbo_t2i',
 		label: 'Krea2 Turbo (T2I)',
 		kind: 't2i',
 		defaults: KREA2_DEFAULTS
+	},
+	'anima-turbo-t2i': {
+		file: 'anima_turbo_t2i',
+		label: 'Anima Turbo (anime T2I)',
+		kind: 't2i',
+		defaults: ANIMA_TURBO_DEFAULTS
+	},
+	'flux2-klein-t2i': {
+		file: 'flux2_klein_t2i',
+		label: 'FLUX.2 Klein (T2I)',
+		kind: 't2i',
+		defaults: FLUX2_KLEIN_DEFAULTS
 	},
 	'anima-inpaint': {
 		file: 'anima_lllite_inpaint',
@@ -154,3 +203,14 @@ export const GRAPHS = {
 } as const satisfies Record<string, GraphDefinition>;
 
 export type GraphId = keyof typeof GRAPHS;
+
+/** The graphs that generate a picture from text alone — what the image picker offers. */
+export const T2I_WORKFLOWS = (Object.keys(GRAPHS) as GraphId[]).filter(
+	(id) => GRAPHS[id].kind === 't2i'
+);
+
+export const DEFAULT_WORKFLOW: GraphId = 'krea2-t2i';
+
+export function isT2iWorkflow(id: string): id is GraphId {
+	return id in GRAPHS && GRAPHS[id as GraphId].kind === 't2i';
+}

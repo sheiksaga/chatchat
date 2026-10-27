@@ -9,12 +9,20 @@
 	import { ImagePlus, TriangleAlert, X } from '@lucide/svelte';
 	import type { ImageRequest } from '$lib/shared/image.js';
 	import type { ImageRow } from '$lib/server/db/images.js';
+	import {
+		DEFAULT_WORKFLOW,
+		GRAPHS,
+		T2I_WORKFLOWS,
+		type GraphId
+	} from '$lib/server/comfy/workflows.js';
 	import IconButton from '$lib/components/ui/icon-button/icon-button.svelte';
 	import ImageViewport from './ImageViewport.svelte';
 	import MaskEditor from './MaskEditor.svelte';
 
 	let { chatId, images = $bindable([]) }: { chatId: string; images?: ImageRow[] } = $props();
 
+	/** Which image model to draw with. Remembered for the session; the picker is one <select>. */
+	let workflow = $state<GraphId>(DEFAULT_WORKFLOW);
 	let viewing = $state<number | null>(null);
 	let editing = $state<ImageRow | null>(null);
 	let busy = $state<{ value: number; max: number } | null>(null);
@@ -38,7 +46,7 @@
 			const response = await fetch('/api/images', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ chatId, ...request })
+				body: JSON.stringify({ chatId, workflow, ...request })
 			});
 			if (!response.ok || !response.body) {
 				error = `request failed: ${response.status}`;
@@ -81,14 +89,14 @@
 		const response = await fetch('/api/images/scene', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ chatId, shot })
+			body: JSON.stringify({ chatId, shot, workflow })
 		});
 		if (!response.ok) {
 			error = `could not build the scene prompt: ${response.status}`;
 			return;
 		}
 		const scene = (await response.json()) as { prompt: string; width: number; height: number };
-		await generate(scene);
+		await generate({ prompt: scene.prompt, width: scene.width, height: scene.height });
 	}
 
 	/** Regenerate: same prompt, new seed unless the caller pinned one. */
@@ -104,10 +112,20 @@
 
 <section class="flex flex-col gap-2 border-t border-border/50 pt-2.5">
 	<div class="flex flex-wrap items-center gap-1.5">
-		<span class="me-1 inline-flex items-center gap-1.5 text-label text-muted-foreground">
+		<label class="me-1 inline-flex items-center gap-1.5 text-label text-muted-foreground">
 			<ImagePlus class="size-3.5" aria-hidden="true" />
-			Picture of this moment
-		</span>
+			<span class="sr-only">Image model</span>
+			<select
+				class="h-7 rounded-md border border-border/70 bg-card/40 px-1.5 text-label text-foreground"
+				bind:value={workflow}
+				aria-label="Image model"
+			>
+				{#each T2I_WORKFLOWS as id (id)}
+					<option value={id}>{GRAPHS[id].label}</option>
+				{/each}
+			</select>
+		</label>
+		<span class="text-label text-muted-foreground">of this moment</span>
 		{#each shots as [shot, label] (shot)}
 			<button
 				class="inline-flex h-7 items-center rounded-md border border-border/70 bg-card/40 px-2.5 text-label text-muted-foreground transition-[color,background-color,border-color,transform] duration-150 ease-soft hover:-translate-y-px hover:border-foreground/25 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
