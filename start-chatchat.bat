@@ -28,6 +28,10 @@ if defined NEED_BUILD (
 rem LAN access: bind to all interfaces so a phone on the same network (or Tailscale)
 rem can reach the app. A token in CHATCHAT_TOKEN gates non-loopback requests; without
 rem one, only this machine can connect.
+rem Inpainting uploads two PNGs (source + mask), which is far more than SvelteKit's 512 KB default.
+rem 32 MB also leaves room for a big card import. Set your own value to override.
+if "%BODY_SIZE_LIMIT%"=="" set BODY_SIZE_LIMIT=32M
+
 if "%HOST%"=="" set HOST=0.0.0.0
 if "%PORT%"=="" set PORT=4173
 

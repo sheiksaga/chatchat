@@ -12,12 +12,11 @@
   "2": {
     "inputs": {
       "clip_name": "{{CLIP}}",
-      "type": "{{CLIP_TYPE}}",
-      "device": "default"
+      "type": "{{CLIP_TYPE}}"
     },
-    "class_type": "CLIPLoader",
+    "class_type": "CLIPLoaderGGUF",
     "_meta": {
-      "title": "Load CLIP"
+      "title": "Load CLIP (GGUF)"
     }
   },
   "3": {

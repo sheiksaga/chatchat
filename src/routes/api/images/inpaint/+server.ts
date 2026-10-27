@@ -12,8 +12,19 @@ import { generateInpaint } from '$lib/server/images/generate.js';
 const MAX_BYTES = 24 * 1024 * 1024;
 
 export async function POST({ request }) {
-	const form = await request.formData().catch(() => null);
-	if (!form) return json({ error: 'Expected a multipart form' }, { status: 400 });
+	// Report *why* the upload could not be read; "Expected a multipart form" alone sent me chasing the
+	// wrong thing once (the boundary was fine, the body reader was not).
+	let form: FormData;
+	try {
+		form = await request.formData();
+	} catch (cause) {
+		return json(
+			{
+				error: `Could not read the upload: ${cause instanceof Error ? cause.message : String(cause)}`
+			},
+			{ status: 400 }
+		);
+	}
 
 	const source = form.get('source');
 	const mask = form.get('mask');

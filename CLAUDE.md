@@ -206,3 +206,9 @@ Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prom
   because its manifest describes the previous build. Restart the app after running e2e.
 - A diffusion prompt has no negation: `no cloak` adds a cloak. `prompts/scene.ts#dropNegations` strips
   those phrases; the correct way to remove something is an inpaint or a negative prompt in the graph.
+- SvelteKit's request body limit is **512 KB** unless `BODY_SIZE_LIMIT` is set. The inpaint route takes two
+  PNGs (~1-2 MB), so `start-chatchat.bat` and the Playwright webServer both set `32M`; a bare `node build`
+  answers "Expected a multipart form" instead. `e2e/images.spec.ts` guards it.
+- FLUX.2 Klein's clip is a **GGUF** (`flux2-klein-4b-uncensored-q4_k_m.gguf`) and needs the
+  `CLIPLoaderGGUF` node — the plain `CLIPLoader` rejects the file ("Value not in list"). The safetensors
+  alternative (`qwen_3_4b`, 7.5 GB) does not fit beside the model on 8 GB.

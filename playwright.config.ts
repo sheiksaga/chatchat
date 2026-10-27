@@ -53,7 +53,8 @@ export default defineConfig({
 				CHATCHAT_CONFIG: `${DATA_DIR}/config.json`,
 				// No ComfyUI in the e2e stack: point at a dead port so /image fails fast instead of
 				// queueing real GPU work on the developer's machine.
-				CHATCHAT_COMFYUI_URL: 'http://127.0.0.1:1'
+				CHATCHAT_COMFYUI_URL: 'http://127.0.0.1:1',
+				BODY_SIZE_LIMIT: '32M'
 			},
 			url: `http://127.0.0.1:${APP_PORT}/`,
 			reuseExistingServer: !process.env.CI,

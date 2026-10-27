@@ -54,6 +54,8 @@ With ComfyUI running (default `http://127.0.0.1:8188`, **start it before llama.c
 - type `/image a lighthouse at dusk, painterly` in the composer — the model never sees this command;
 - or press **wide / medium / close-up** above the composer for "a picture of this moment", which tags the
   scene from the character card, the chat's `look` and the last turns;
+- pick the model in the toolbar: **FLUX.2 Klein** (4 steps, ~18-20 s, photoreal), **Anima Turbo**
+  (8 steps, ~9 s, anime, drifts bold), **Krea2 Turbo** (8 steps, ~43 s, painterly);
 - press the thumbnail to open the viewer: regenerate, regenerate with the same seed, or **edit region**
   to paint a mask and have ComfyUI repaint just that part.
 
