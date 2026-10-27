@@ -160,7 +160,7 @@
   },
   "13": {
     "inputs": {
-      "filename_prefix": "ComfyInject",
+      "filename_prefix": "{{FILENAME_PREFIX}}",
       "images": [
         "12",
         0

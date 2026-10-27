@@ -98,6 +98,7 @@ prints one line per check. [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) ma
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | data flow, decisions, layout                                         |
 | [docs/PARITY.md](docs/PARITY.md)                   | feature-by-feature status vs the pre-rewrite app                     |
 | [docs/DEPS.md](docs/DEPS.md)                       | why each dependency exists, with usage pinned to the installed major |
+| [docs/IMAGE_MODELS.md](docs/IMAGE_MODELS.md)       | which of the seven image models to use, measured on nine story beats |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | symptom → probe → fix                                                |
 
 ```bat

@@ -72,8 +72,22 @@ export function setChatStory(db: Db, id: string, story: unknown): void {
 	);
 }
 
+/**
+ * Delete a chat and its search index rows.
+ *
+ * Messages go with the chat (FK cascade), but `messages_fts` is maintained by hand — skipping it left
+ * ghosts: search returned hits whose chat 404s. Found on a real DB with 50 such rows.
+ */
 export function deleteChat(db: Db, id: string): void {
-	db.prepare('DELETE FROM chats WHERE id = ?').run(id);
+	db.exec('BEGIN');
+	try {
+		db.prepare('DELETE FROM messages_fts WHERE chat_id = ?').run(id);
+		db.prepare('DELETE FROM chats WHERE id = ?').run(id);
+		db.exec('COMMIT');
+	} catch (error) {
+		db.exec('ROLLBACK');
+		throw error;
+	}
 }
 
 /** Append a message and keep the chat's `updated_at` in the same transaction. */

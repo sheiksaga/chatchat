@@ -82,6 +82,14 @@ describe('messages', () => {
 		expect(listMessages(db, chat.id)).toHaveLength(0);
 	});
 
+	it('drops the search rows too, so a deleted chat cannot be found', () => {
+		const chat = createChat(db);
+		appendMessage(db, { chatId: chat.id, role: 'user', content: 'the lighthouse keeper' });
+		expect(searchMessages(db, 'lighthouse')).toHaveLength(1);
+		deleteChat(db, chat.id);
+		expect(searchMessages(db, 'lighthouse')).toHaveLength(0);
+	});
+
 	it('keeps the FTS index in step with edits and deletes', () => {
 		const chat = createChat(db);
 		const message = appendMessage(db, {

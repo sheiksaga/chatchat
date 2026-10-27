@@ -5,6 +5,8 @@
  * defaults. A graph added without a default for one of its placeholders fails here, in `npm run verify`,
  * instead of failing at generation time on the GPU.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from '$lib/shared/image.js';
 import {
@@ -87,6 +89,20 @@ describe('registered graphs', () => {
 		expect(DEFAULT_WORKFLOW).toBe(DEFAULT_IMAGE_MODEL);
 		for (const model of IMAGE_MODELS) {
 			expect(GRAPHS[model.id].label).toBeTruthy();
+		}
+	});
+
+	it('names its output after the model, not after the graph it was copied from', () => {
+		// ComfyUI's output folder is how a user tells two runs apart, so a hardcoded prefix is a real bug:
+		// FLUX.2 shipped writing `ComfyInject_*.png` because the template it came from said so.
+		for (const id of T2I_WORKFLOWS) {
+			const template = JSON.parse(
+				readFileSync(join('workflows', `${GRAPHS[id].file}.json`), 'utf8')
+			) as Record<string, { inputs?: { filename_prefix?: string } }>;
+			const prefixes = Object.values(template)
+				.map((node) => node.inputs?.filename_prefix)
+				.filter((value): value is string => typeof value === 'string');
+			expect(prefixes, id).toEqual(['{{FILENAME_PREFIX}}']);
 		}
 	});
 
