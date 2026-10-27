@@ -214,6 +214,29 @@ export const ANIMA_BASE_DEFAULTS: GraphValues = {
 	FILENAME_PREFIX: 'AnimaBase'
 };
 
+/**
+ * Z-Image Turbo (6B, int8-convrot) — Tongyi's distilled model, 8 steps / CFG 1, decodes through the
+ * Flux VAE (`ae.safetensors`), so its graph uses `EmptySD3LatentImage`.
+ *
+ * CLIP type is `qwen_image` for a non-obvious reason: ComfyUI keys the encoder off the *file's* text
+ * model (Qwen3-4B → Z-Image tokenizer) and only `flux`/`flux2` would mis-route it, so any other label in
+ * this CLIPLoader's enum behaves the same. `qwen_image` is simply the least misleading one on offer.
+ */
+export const Z_IMAGE_DEFAULTS: GraphValues = {
+	MODEL: 'z_image_turbo_int8_convrot.safetensors',
+	CLIP: 'qwen_3_4b.safetensors',
+	CLIP_TYPE: 'qwen_image',
+	VAE: 'ae.safetensors',
+	SAMPLER: 'euler',
+	SCHEDULER: 'simple',
+	STEPS: 8,
+	CFG: 1,
+	WIDTH: 1024,
+	HEIGHT: 1024,
+	SEED: 1,
+	FILENAME_PREFIX: 'ZImageTurbo'
+};
+
 export const GRAPHS = {
 	'krea2-t2i': {
 		file: 'krea2_turbo_t2i',
@@ -251,6 +274,12 @@ export const GRAPHS = {
 		kind: 't2i',
 		defaults: ANIMA_BASE_DEFAULTS
 	},
+	'z-image-turbo-t2i': {
+		file: 'z_image_turbo_t2i',
+		label: 'Z-Image Turbo',
+		kind: 't2i',
+		defaults: Z_IMAGE_DEFAULTS
+	},
 	'anima-inpaint': {
 		file: 'anima_lllite_inpaint',
 		label: 'Anima LLLite (inpaint)',
@@ -266,7 +295,7 @@ export const T2I_WORKFLOWS = (Object.keys(GRAPHS) as GraphId[]).filter(
 	(id) => GRAPHS[id].kind === 't2i'
 );
 
-export const DEFAULT_WORKFLOW: GraphId = 'krea2-t2i';
+export const DEFAULT_WORKFLOW: GraphId = 'krea2-anime-t2i';
 
 export function isT2iWorkflow(id: string): id is GraphId {
 	return id in GRAPHS && GRAPHS[id as GraphId].kind === 't2i';

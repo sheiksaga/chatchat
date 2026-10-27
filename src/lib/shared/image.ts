@@ -37,6 +37,7 @@ export const IMAGE_MODELS = [
 	// Ordered by what usually wins a story scene; the time is on a laptop 8 GB card, so a phone user
 	// knows what they are waiting for before they tap.
 	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~18 s)' },
+	{ id: 'z-image-turbo-t2i', label: 'Z-Image Turbo 6B (~16 s)' },
 	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~22 s)' },
 	{ id: 'anima-base-t2i', label: 'Anima Base obedient (~27 s)' },
 	{ id: 'anima-turbo-t2i', label: 'Anima Turbo fastest (~7 s)' },
@@ -46,7 +47,8 @@ export const IMAGE_MODELS = [
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
 
-export const DEFAULT_IMAGE_MODEL: ImageModelId = 'krea2-t2i';
+// Measured best of the six for a chat scene at 832x1216: keeps wardrobe and props, ~18 s.
+export const DEFAULT_IMAGE_MODEL: ImageModelId = 'krea2-anime-t2i';
 
 export const IMAGE_MODEL_IDS = IMAGE_MODELS.map((model) => model.id) as [
 	ImageModelId,

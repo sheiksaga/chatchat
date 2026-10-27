@@ -49,7 +49,8 @@ describe('registered graphs', () => {
 			'flux2-klein-t2i',
 			'anima-fp16-t2i',
 			'krea2-anime-t2i',
-			'anima-base-t2i'
+			'anima-base-t2i',
+			'z-image-turbo-t2i'
 		]);
 		expect(GRAPHS['anima-inpaint'].kind).toBe('inpaint');
 		expect(isT2iWorkflow('anima-inpaint')).toBe(false);
@@ -91,7 +92,9 @@ describe('registered graphs', () => {
 
 	it('picks a CLIP type each graph actually uses', () => {
 		// These are the strings ComfyUI's CLIPLoader accepts; a typo here is a 400 from ComfyUI.
-		const allowed = new Set(['krea2', 'flux2', 'stable_diffusion']);
+		// `qwen_image` is what Z-Image uses: ComfyUI routes by the encoder file's own text model, and only
+		// flux/flux2 would send a Qwen3-4B encoder to the wrong tokenizer, so the label is a free choice.
+		const allowed = new Set(['krea2', 'flux2', 'stable_diffusion', 'qwen_image']);
 		for (const [id, definition] of Object.entries(GRAPHS)) {
 			expect(allowed.has(String(definition.defaults.CLIP_TYPE)), id).toBe(true);
 		}

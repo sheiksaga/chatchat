@@ -212,3 +212,7 @@ Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prom
 - FLUX.2 Klein's clip is a **GGUF** (`flux2-klein-4b-uncensored-q4_k_m.gguf`) and needs the
   `CLIPLoaderGGUF` node — the plain `CLIPLoader` rejects the file ("Value not in list"). The safetensors
   alternative (`qwen_3_4b`, 7.5 GB) does not fit beside the model on 8 GB.
+- Z-Image's text encoder loads with a **CLIPLoader type that does not exist** in ComfyUI's enum. ComfyUI
+  routes by the encoder file's own text model (Qwen3-4B → Z-Image tokenizer) and only `flux`/`flux2` would
+  mis-route it, so the graph uses `qwen_image` as the least misleading label. Its latent is Flux-format
+  (16-channel), so the graph needs `EmptySD3LatentImage`, and the VAE is the Flux `ae.safetensors`.

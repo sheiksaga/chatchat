@@ -55,8 +55,8 @@ With ComfyUI running (default `http://127.0.0.1:8188`, **start it before llama.c
 - or press **wide / medium / close-up** above the composer for "a picture of this moment", which tags the
   scene from the character card, the chat's `look` and the last turns;
 - pick the model in the toolbar — one entry per checkpoint you have installed, with its measured time
-  (8 GB laptop card): Krea2 Anime v14 ~18 s, FLUX.2 Klein ~22 s, Anima Base ~27 s, Anima Turbo ~7 s,
-  Anima Turbo fp16 ~8 s, Krea2 Turbo ~43 s;
+  (8 GB laptop card): Krea2 Anime v14 ~18 s, Z-Image Turbo ~16 s, FLUX.2 Klein ~22 s, Anima Base ~27 s,
+  Anima Turbo ~8 s, Anima Turbo fp16 ~8 s, Krea2 Turbo ~44 s;
 - press the thumbnail to open the viewer: regenerate, regenerate with the same seed, or **edit region**
   to paint a mask and have ComfyUI repaint just that part.
 
