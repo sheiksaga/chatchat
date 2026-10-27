@@ -6,6 +6,7 @@
  * instead of failing at generation time on the GPU.
  */
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from '$lib/shared/image.js';
 import {
 	DEFAULT_WORKFLOW,
 	GRAPHS,
@@ -55,6 +56,14 @@ describe('registered graphs', () => {
 			expect(Number(values.CFG), id).toBe(1);
 			expect(Number(values.STEPS), id).toBeGreaterThanOrEqual(4);
 			expect(Number(values.STEPS), id).toBeLessThanOrEqual(8);
+		}
+	});
+
+	it('agrees with the shared picker list, so the UI cannot offer a missing graph', () => {
+		expect(T2I_WORKFLOWS).toEqual(IMAGE_MODELS.map((model) => model.id));
+		expect(DEFAULT_WORKFLOW).toBe(DEFAULT_IMAGE_MODEL);
+		for (const model of IMAGE_MODELS) {
+			expect(GRAPHS[model.id].label).toBeTruthy();
 		}
 	});
 

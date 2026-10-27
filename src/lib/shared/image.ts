@@ -25,6 +25,29 @@ export const SIZE_PRESETS = [
 	{ label: 'Wide', value: '1344x768', width: 1344, height: 768 }
 ] as const;
 
+/**
+ * The image models the UI offers.
+ *
+ * **Shared** because the browser needs the list for its picker and the server needs it to validate the
+ * request; `$lib/server` cannot be imported into a component (SvelteKit fails the build). The server's
+ * `GRAPHS` registry is checked against this list by a test, so adding a graph without its label — or
+ * the other way round — breaks `npm run verify` rather than the picker.
+ */
+export const IMAGE_MODELS = [
+	{ id: 'krea2-t2i', label: 'Krea2 Turbo' },
+	{ id: 'anima-turbo-t2i', label: 'Anima Turbo (anime)' },
+	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein' }
+] as const;
+
+export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
+
+export const DEFAULT_IMAGE_MODEL: ImageModelId = 'krea2-t2i';
+
+export const IMAGE_MODEL_IDS = IMAGE_MODELS.map((model) => model.id) as [
+	ImageModelId,
+	...ImageModelId[]
+];
+
 const MARKER = /\[\[\s*IMG\s*:([^\]]*)\]\]/gi;
 
 /** Parse one marker body. Never throws: a half-broken marker yields null instead of killing a reply. */

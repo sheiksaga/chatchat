@@ -9,12 +9,7 @@
 	import { ImagePlus, TriangleAlert, X } from '@lucide/svelte';
 	import type { ImageRequest } from '$lib/shared/image.js';
 	import type { ImageRow } from '$lib/server/db/images.js';
-	import {
-		DEFAULT_WORKFLOW,
-		GRAPHS,
-		T2I_WORKFLOWS,
-		type GraphId
-	} from '$lib/server/comfy/workflows.js';
+	import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, type ImageModelId } from '$lib/shared/image.js';
 	import IconButton from '$lib/components/ui/icon-button/icon-button.svelte';
 	import ImageViewport from './ImageViewport.svelte';
 	import MaskEditor from './MaskEditor.svelte';
@@ -22,7 +17,7 @@
 	let { chatId, images = $bindable([]) }: { chatId: string; images?: ImageRow[] } = $props();
 
 	/** Which image model to draw with. Remembered for the session; the picker is one <select>. */
-	let workflow = $state<GraphId>(DEFAULT_WORKFLOW);
+	let workflow = $state<ImageModelId>(DEFAULT_IMAGE_MODEL);
 	let viewing = $state<number | null>(null);
 	let editing = $state<ImageRow | null>(null);
 	let busy = $state<{ value: number; max: number } | null>(null);
@@ -120,8 +115,8 @@
 				bind:value={workflow}
 				aria-label="Image model"
 			>
-				{#each T2I_WORKFLOWS as id (id)}
-					<option value={id}>{GRAPHS[id].label}</option>
+				{#each IMAGE_MODELS as model (model.id)}
+					<option value={model.id}>{model.label}</option>
 				{/each}
 			</select>
 		</label>
