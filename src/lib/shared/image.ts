@@ -38,6 +38,7 @@ export const IMAGE_MODELS = [
 	// knows what they are waiting for before they tap.
 	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~18 s)' },
 	{ id: 'z-image-turbo-t2i', label: 'Z-Image Turbo 6B (~16 s)' },
+	{ id: 'z-image-mystic-t2i', label: 'Z-Image + Mystic XXX NSFW (~15 s)' },
 	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~22 s)' },
 	{ id: 'anima-base-t2i', label: 'Anima Base obedient (~27 s)' },
 	{ id: 'anima-turbo-t2i', label: 'Anima Turbo fastest (~7 s)' },

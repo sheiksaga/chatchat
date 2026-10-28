@@ -237,6 +237,20 @@ export const Z_IMAGE_DEFAULTS: GraphValues = {
 	FILENAME_PREFIX: 'ZImageTurbo'
 };
 
+/**
+ * Z-Image Turbo + the Civitai LoRA that unlocks its explicit content
+ * (`Mystic-XXX-ZIT-V7`, trained on ZImageTurbo, 0.2 GB, no trigger word).
+ *
+ * The author's own workflow runs `LoraLoader` at strength 1 / 1 on both the model and the clip, so the
+ * style tags it learned also reach the text encoder. It sits after the UNET loader, exactly there.
+ */
+export const Z_IMAGE_LORA_DEFAULTS: GraphValues = {
+	...Z_IMAGE_DEFAULTS,
+	LORA: 'Mystic-XXX-ZIT-V7.safetensors',
+	LORA_STRENGTH: 1,
+	FILENAME_PREFIX: 'ZImageMystic'
+};
+
 export const GRAPHS = {
 	'krea2-t2i': {
 		file: 'krea2_turbo_t2i',
@@ -279,6 +293,12 @@ export const GRAPHS = {
 		label: 'Z-Image Turbo',
 		kind: 't2i',
 		defaults: Z_IMAGE_DEFAULTS
+	},
+	'z-image-mystic-t2i': {
+		file: 'z_image_turbo_lora_t2i',
+		label: 'Z-Image Turbo + Mystic XXX',
+		kind: 't2i',
+		defaults: Z_IMAGE_LORA_DEFAULTS
 	},
 	'anima-inpaint': {
 		file: 'anima_lllite_inpaint',
