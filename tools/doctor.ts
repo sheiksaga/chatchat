@@ -14,6 +14,7 @@ import { getConfig } from '../src/lib/server/config-store.js';
 import { backendFor } from '../src/lib/server/backends/registry.js';
 import { readRouterIni, samplersForModel } from '../src/lib/server/backends/llm/ini.js';
 import { comfyHealth } from '../src/lib/server/comfy/client.js';
+import { GRAPHS } from '../src/lib/server/comfy/workflows.js';
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -98,6 +99,41 @@ async function probeComfy() {
 	}
 }
 
+/**
+ * Every LoRA the image registry names, checked against what ComfyUI can actually see. A missing download
+ * is otherwise a failed picture with a ComfyUI 400 in it, which is the least helpful way to learn that a
+ * 34 MB file is absent.
+ */
+async function probeLoras() {
+	const wanted = new Set<string>();
+	for (const definition of Object.values(GRAPHS)) {
+		for (const key of ['LORA_NAME', 'LORA2_NAME', 'UNLOCKED_LORA_NAME']) {
+			const value = definition.defaults[key];
+			if (typeof value === 'string' && value.trim()) wanted.add(value);
+		}
+	}
+	if (!wanted.size) return;
+
+	try {
+		const response = await fetch(`${COMFYUI_URL}/object_info/LoraLoaderModelOnly`);
+		if (!response.ok) throw new Error(String(response.status));
+		const info = (await response.json()) as {
+			LoraLoaderModelOnly?: { input?: { required?: { lora_name?: [string[]] } } };
+		};
+		const available = new Set(info.LoraLoaderModelOnly?.input?.required?.lora_name?.[0] ?? []);
+		const missing = [...wanted].filter((name) => !available.has(name));
+		record(
+			'image LoRAs',
+			missing.length === 0,
+			missing.length
+				? `missing from ComfyUI/models/loras: ${missing.join(', ')}`
+				: `${wanted.size} present`
+		);
+	} catch {
+		record('image LoRAs', true, 'could not ask ComfyUI (it is probably down)');
+	}
+}
+
 function probeFiles() {
 	record('workflows dir', existsSync(WORKFLOWS_DIR), WORKFLOWS_DIR);
 	record('data dir', existsSync(DATA_DIR), DATA_DIR);
@@ -132,6 +168,7 @@ function probeLan() {
 await probeProviders();
 probeRouterIni();
 await probeComfy();
+await probeLoras();
 probeFiles();
 probeLan();
 

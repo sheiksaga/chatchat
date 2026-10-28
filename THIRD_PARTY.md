@@ -43,6 +43,22 @@ documentation.
 No web fonts are downloaded at runtime. The UI uses the operating system's UI font stack, so the app
 works with no network at all. Icons are inline SVG or `@lucide/svelte` (ISC).
 
+## Image LoRAs (downloaded separately)
+
+The app names five LoRA files that sit beside the checkpoints in `ComfyUI/models/loras/`. They are weights,
+not code, so the GPL of this repository does not apply to them and their own terms do; each is listed with
+its source so the terms can be checked. `npm run doctor` reports any that are missing.
+
+| File                            | Source                                                                | Used by                   |
+| ------------------------------- | --------------------------------------------------------------------- | ------------------------- |
+| `Zed_Turbo_Lightning`           | <https://civitai.com/models/2409672> (step distillation, 4 steps)     | Z-Image Turbo             |
+| `Mystic-XXX-ZIT-V7`             | Civitai (NSFW unlock, rank 64) — search the file name                 | Z-Image + Mystic XXX      |
+| `FLUX_NSFW_Fix`                 | <https://civitai.com/models/2482439> (4B anatomy/NSFW fix)            | FLUX.2 Klein NSFW         |
+| `anima-highres-aesthetic-boost` | <https://civitai.com/models/2540444> (higher resolutions, aesthetics) | Anima Turbo + detail      |
+| `rendering_detailer_base10`     | <https://civitai.com/models/2620171> (detail slider)                  | Anima Turbo + detail      |
+| `snofs_krea_v1_nostrip`         | ships with Krea2 Anime (present in the graph at strength 0)           | Krea2 Anime               |
+| `fedor_bypass`                  | ships with Krea2 (style bypass)                                       | Krea2 Turbo / Krea2 Anime |
+
 ## Not bundled
 
 - ComfyUI, llama.cpp, LM Studio and any model weights: the user installs and runs these separately.

@@ -47,6 +47,7 @@ const NUMERIC = new Set([
 	'WIDTH',
 	'HEIGHT',
 	'LORA_STRENGTH',
+	'LORA2_STRENGTH',
 	'UNLOCKED_LORA_STRENGTH'
 ]);
 
@@ -176,6 +177,46 @@ export const FLUX2_KLEIN_DEFAULTS: GraphValues = {
 };
 
 /**
+ * Anima Turbo with its two community quality LoRAs: **Highres/Aesthetic Boost** and the **rendering Detail
+ * Tweaker**. Measured +0.4 s per image for cleaner lighting, more material detail and fewer garbled text
+ * artifacts in the corners.
+ */
+export const ANIMA_QUALITY_DEFAULTS: GraphValues = {
+	...ANIMA_TURBO_DEFAULTS,
+	LORA_NAME: 'anima-highres-aesthetic-boost.safetensors',
+	LORA_STRENGTH: 0.6,
+	LORA2_NAME: 'rendering_detailer_base10.safetensors',
+	LORA2_STRENGTH: 0.5,
+	FILENAME_PREFIX: 'AnimaTurbo'
+};
+
+/**
+ * FLUX.2 Klein **instruction edit** — "change this picture", not "draw a new one". The instruction goes
+ * through CLIPTextEncode and `ReferenceLatent` attaches it to the encoded source latent, so the sampler
+ * edits the pixels it was given instead of starting from noise. Same distilled recipe (4 steps, CFG 1)
+ * and the same GGUF encoder as the T2I graph.
+ *
+ * In the benchmark this was the only edit path that obeyed its instruction: the generic img2img graph at
+ * denoise 0.55 left the clothes untouched on every other model in the set.
+ */
+export const FLUX2_EDIT_DEFAULTS: GraphValues = {
+	...FLUX2_KLEIN_DEFAULTS,
+	FILENAME_PREFIX: 'Flux2Edit'
+};
+
+/**
+ * FLUX.2 Klein 4B with the **Klein Fixes (NSFW)** LoRA, 4B-matched (the popular 9B unlockers will not load:
+ * different tensor shapes). Without it this model renders "nude" as a smooth mannequin and leaves the
+ * underwear on; at 0.8 it renders the same prompt as an actual nude with detailed anatomy.
+ */
+export const FLUX2_NSFW_DEFAULTS: GraphValues = {
+	...FLUX2_KLEIN_DEFAULTS,
+	LORA_NAME: 'FLUX_NSFW_Fix.safetensors',
+	LORA_STRENGTH: 0.8,
+	FILENAME_PREFIX: 'Flux2NSFW'
+};
+
+/**
  * The same anima turbo model in fp16 rather than int8-convrot. Identical recipe; the fp16 weights need
  * ~4 GB instead of ~2 GB but render cleaner fine detail (faces, hair strands).
  */
@@ -244,10 +285,34 @@ export const Z_IMAGE_DEFAULTS: GraphValues = {
  * The author's own workflow runs `LoraLoader` at strength 1 / 1 on both the model and the clip, so the
  * style tags it learned also reach the text encoder. It sits after the UNET loader, exactly there.
  */
+/**
+ * Z-Image with **Zed Turbo Lightning** — a 34 MB step-distiller that halves the sampler cost (8 steps to
+ * 4) without changing the model or the look. Measured on this card: 14.6 s → 8.9 s, and wide shots keep
+ * their composition instead of drifting. It is an add-on file, not a new checkpoint.
+ */
+export const Z_IMAGE_FAST_DEFAULTS: GraphValues = {
+	...Z_IMAGE_DEFAULTS,
+	STEPS: 4,
+	LORA_NAME: 'Zed_Turbo_Lightning.safetensors',
+	LORA_STRENGTH: 1,
+	FILENAME_PREFIX: 'ZImageTurbo'
+};
+
+/** The plain NSFW recipe, for anyone who has not downloaded the Lightning LoRA. */
 export const Z_IMAGE_LORA_DEFAULTS: GraphValues = {
 	...Z_IMAGE_DEFAULTS,
-	LORA: 'Mystic-XXX-ZIT-V7.safetensors',
+	LORA_NAME: 'Mystic-XXX-ZIT-V7.safetensors',
 	LORA_STRENGTH: 1,
+	FILENAME_PREFIX: 'ZImageMystic'
+};
+
+/** Both LoRAs at once: Lightning in the first slot, Mystic XXX in the second. */
+export const Z_IMAGE_MYSTIC_FAST_DEFAULTS: GraphValues = {
+	...Z_IMAGE_FAST_DEFAULTS,
+	LORA_NAME: 'Zed_Turbo_Lightning.safetensors',
+	LORA_STRENGTH: 1,
+	LORA2_NAME: 'Mystic-XXX-ZIT-V7.safetensors',
+	LORA2_STRENGTH: 1,
 	FILENAME_PREFIX: 'ZImageMystic'
 };
 
@@ -259,16 +324,22 @@ export const GRAPHS = {
 		defaults: KREA2_DEFAULTS
 	},
 	'anima-turbo-t2i': {
-		file: 'anima_turbo_t2i',
-		label: 'Anima Turbo (anime T2I)',
+		file: 'anima_turbo_quality_t2i',
+		label: 'Anima Turbo + detail LoRAs',
 		kind: 't2i',
-		defaults: ANIMA_TURBO_DEFAULTS
+		defaults: ANIMA_QUALITY_DEFAULTS
 	},
 	'flux2-klein-t2i': {
 		file: 'flux2_klein_t2i',
 		label: 'FLUX.2 Klein (T2I)',
 		kind: 't2i',
 		defaults: FLUX2_KLEIN_DEFAULTS
+	},
+	'flux2-klein-nsfw-t2i': {
+		file: 'flux2_klein_lora_t2i',
+		label: 'FLUX.2 Klein NSFW (4B unlock)',
+		kind: 't2i',
+		defaults: FLUX2_NSFW_DEFAULTS
 	},
 	'anima-fp16-t2i': {
 		file: 'anima_turbo_t2i',
@@ -289,22 +360,28 @@ export const GRAPHS = {
 		defaults: ANIMA_BASE_DEFAULTS
 	},
 	'z-image-turbo-t2i': {
-		file: 'z_image_turbo_t2i',
-		label: 'Z-Image Turbo',
+		file: 'z_image_turbo_lora_t2i',
+		label: 'Z-Image Turbo (4-step)',
 		kind: 't2i',
-		defaults: Z_IMAGE_DEFAULTS
+		defaults: Z_IMAGE_FAST_DEFAULTS
 	},
 	'z-image-mystic-t2i': {
-		file: 'z_image_turbo_lora_t2i',
-		label: 'Z-Image Turbo + Mystic XXX',
+		file: 'z_image_turbo_lora2_t2i',
+		label: 'Z-Image + Mystic XXX NSFW',
 		kind: 't2i',
-		defaults: Z_IMAGE_LORA_DEFAULTS
+		defaults: Z_IMAGE_MYSTIC_FAST_DEFAULTS
 	},
 	'anima-inpaint': {
 		file: 'anima_lllite_inpaint',
 		label: 'Anima LLLite (inpaint)',
 		kind: 'inpaint',
 		defaults: ANIMA_INPAINT_DEFAULTS
+	},
+	'flux2-klein-edit': {
+		file: 'flux2_klein_edit',
+		label: 'FLUX.2 Klein (instruction edit)',
+		kind: 'edit',
+		defaults: FLUX2_EDIT_DEFAULTS
 	}
 } as const satisfies Record<string, GraphDefinition>;
 
@@ -316,6 +393,9 @@ export const T2I_WORKFLOWS = (Object.keys(GRAPHS) as GraphId[]).filter(
 );
 
 export const DEFAULT_WORKFLOW: GraphId = 'krea2-anime-t2i';
+
+/** The graph behind "change this picture": one instruction, one source image. */
+export const EDIT_WORKFLOW: GraphId = 'flux2-klein-edit';
 
 export function isT2iWorkflow(id: string): id is GraphId {
 	return id in GRAPHS && GRAPHS[id as GraphId].kind === 't2i';

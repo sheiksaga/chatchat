@@ -34,17 +34,40 @@
 	/** Generate from a typed `/image …` command or from an `[[IMG: …]]` chip under a reply. */
 	export async function generate(request: ImageRequest) {
 		if (busy) return;
+		await runJob('/api/images', { chatId, workflow, ...request });
+	}
+
+	/**
+	 * "Change this picture." The server reads the source bytes and talks to ComfyUI's edit graph; we only
+	 * send the id and the sentence, so this is cheap even over a phone connection.
+	 */
+	async function editWithInstruction(image: ImageRow, instruction: string) {
+		if (busy) return;
+		viewing = null;
+		await runJob('/api/images/edit', { chatId, imageId: image.id, instruction });
+	}
+
+	/**
+	 * One image job: POST, then read SSE frames until `done` or `error`. Shared by generate and edit
+	 * because both endpoints answer in exactly the same shape.
+	 */
+	async function runJob(endpoint: string, body: unknown) {
 		error = null;
 		busy = { value: 0, max: 1 };
 
 		try {
-			const response = await fetch('/api/images', {
+			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ chatId, workflow, ...request })
+				body: JSON.stringify(body)
 			});
 			if (!response.ok || !response.body) {
-				error = `request failed: ${response.status}`;
+				// A refusal (404/410/400) is JSON, not a stream; show its message instead of a status code.
+				const detail = await response
+					.clone()
+					.json()
+					.catch(() => null);
+				error = detail?.error ?? `request failed: ${response.status}`;
 				return;
 			}
 
@@ -191,6 +214,7 @@
 				viewing = null;
 				editing = image;
 			}}
+			oninstruct={(image, instruction) => void editWithInstruction(image, instruction)}
 			ondelete={async (image) => {
 				await fetch(`/api/images/${image.id}`, { method: 'DELETE' });
 				images = images.filter((candidate) => candidate.id !== image.id);

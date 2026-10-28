@@ -16,13 +16,16 @@ const dataDir = mkdtempSync(path.join(tmpdir(), 'chatchat-images-'));
 process.env.CHATCHAT_DATA_DIR = dataDir;
 
 const { startFakeComfy } = await import('../comfy/fake-comfy.js');
-const { generateImage, generateInpaint } = await import('./generate.js');
+const { generateEdit, generateImage, generateInpaint } = await import('./generate.js');
 const { readImageFile, pngSize, sniffMime } = await import('./store.js');
 const { db, closeDb } = await import('../db/index.js');
 const { getImage, listImages } = await import('../db/images.js');
 const { createChat } = await import('../db/chats.js');
 const { findImageMarkers, parseImageCommand, parseMarkerBody, stripImageMarkers } =
 	await import('$lib/shared/image.js');
+
+/** The graph the fake ComfyUI recorded, in the shape these assertions read it. */
+type QueuedGraph = Record<string, { class_type?: string; inputs: Record<string, unknown> }>;
 
 let comfy: Awaited<ReturnType<typeof startFakeComfy>>;
 
@@ -92,7 +95,7 @@ describe('generateImage', () => {
 		});
 
 		// The queued graph carries the prompt, size and seed through to ComfyUI.
-		const graph = comfy.queued.at(-1)?.graph as Record<string, { inputs: Record<string, unknown> }>;
+		const graph = comfy.queued.at(-1)?.graph as QueuedGraph;
 		const serialised = JSON.stringify(graph);
 		expect(serialised).toContain('a lighthouse, painterly');
 		expect(serialised).toContain('832');
@@ -122,7 +125,7 @@ describe('generateImage', () => {
 			workflow: 'anima-turbo-t2i',
 			comfyUrl: comfy.url
 		});
-		const graph = comfy.queued.at(-1)?.graph as Record<string, { inputs: Record<string, unknown> }>;
+		const graph = comfy.queued.at(-1)?.graph as QueuedGraph;
 		const serialised = JSON.stringify(graph);
 
 		// The image-model picker only works if the chosen graph's own model file is what gets queued.
@@ -159,11 +162,49 @@ describe('generateInpaint', () => {
 		});
 
 		expect(comfy.uploads).toHaveLength(2);
-		const graph = comfy.queued.at(-1)?.graph as Record<string, { inputs: Record<string, unknown> }>;
+		const graph = comfy.queued.at(-1)?.graph as QueuedGraph;
 		const serialised = JSON.stringify(graph);
 		expect(serialised).toContain('uploaded-1.png');
 		expect(serialised).toContain('uploaded-2.png');
 		expect(serialised).toContain('a red flower');
 		expect(result.image.workflow).toBe('anima-inpaint');
+	});
+});
+
+describe('generateEdit', () => {
+	it('uploads the source, then queues the edit graph with the instruction', async () => {
+		const result = await generateEdit({
+			instruction: 'turn the sweater into a black evening gown',
+			source: Buffer.from('source-bytes'),
+			sourceId: 'img-1',
+			width: 832,
+			height: 1216,
+			comfyUrl: comfy.url
+		});
+
+		// `uploads` accumulates across the file, so only the newest one belongs to this test.
+		expect(comfy.uploads.at(-1)).toBeTruthy();
+		const graph = comfy.queued.at(-1)?.graph as QueuedGraph;
+		const serialised = JSON.stringify(graph);
+
+		expect(serialised).toContain(comfy.uploads.at(-1));
+		expect(serialised).toContain('turn the sweater into a black evening gown');
+		// The source latent is what separates an edit from a redraw; without it the model invents a scene.
+		expect(Object.values(graph).map((node) => node.class_type ?? '')).toContain('ReferenceLatent');
+		expect(result.image.workflow).toBe('flux2-klein-edit');
+		expect(result.image.prompt).toBe('turn the sweater into a black evening gown');
+	});
+
+	it('keeps the source aspect ratio when the caller passes no size', async () => {
+		// A 3x1 PNG: the empty latent has to match the encoded source, or the edit lands misaligned.
+		const png = Buffer.from(
+			'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAYAAAA/44iwAAAAEUlEQVR4nGP4z8DwHxkAQBgIAQC7G0A8AAAAAElFTkSuQmCC',
+			'base64'
+		);
+		await generateEdit({ instruction: 'make it rain', source: png, comfyUrl: comfy.url });
+
+		const graph = comfy.queued.at(-1)?.graph as QueuedGraph;
+		const latent = Object.values(graph).find((node) => node.class_type === 'EmptyFlux2LatentImage');
+		expect(latent?.inputs).toMatchObject({ width: 256, height: 256 });
 	});
 });

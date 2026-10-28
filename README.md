@@ -55,10 +55,15 @@ With ComfyUI running (default `http://127.0.0.1:8188`, **start it before llama.c
 - or press **wide / medium / close-up** above the composer for "a picture of this moment", which tags the
   scene from the character card, the chat's `look` and the last turns;
 - pick the model in the toolbar — one entry per checkpoint you have installed, with its measured time
-  (8 GB laptop card): Krea2 Anime v14 ~18 s, Z-Image Turbo ~16 s, FLUX.2 Klein ~22 s, Anima Base ~27 s,
-  Anima Turbo ~8 s, Anima Turbo fp16 ~8 s, Krea2 Turbo ~44 s;
-- press the thumbnail to open the viewer: regenerate, regenerate with the same seed, or **edit region**
-  to paint a mask and have ComfyUI repaint just that part.
+  (8 GB laptop card, chat idle): Krea2 Anime v14 ~14 s, Z-Image Turbo ~5 s, Z-Image + Mystic XXX ~5 s,
+  FLUX.2 Klein ~4 s, FLUX.2 Klein NSFW ~4 s, Anima Base ~27 s, Anima Turbo + detail ~4 s, Anima Turbo
+  fp16 ~8 s, Krea2 Turbo ~44 s;
+- press the thumbnail to open the viewer: regenerate, regenerate with the same seed, **edit region** to
+  paint a mask and have ComfyUI repaint just that part, or **change with a sentence** — type
+  "black evening gown instead of the sweater" and FLUX.2 edits the picture it is looking at. Image work
+  is ~70 % faster when the language model is not holding VRAM, which is why the app unloads it when idle;
+- three of these recipes need a LoRA file beside the checkpoint (`docs/IMAGE_MODELS.md` lists them, and
+  `npm run doctor` names any that are missing).
 
 Pictures live in `data/images/` with their prompt, seed and workflow in the database. If a reply writes
 `[[IMG: …]]`, the transcript shows a button instead of spending GPU time unasked.
@@ -92,14 +97,14 @@ prints one line per check. [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) ma
 
 ## For contributors (human or AI)
 
-| Document                                           | Purpose                                                              |
-| -------------------------------------------------- | -------------------------------------------------------------------- |
-| [CLAUDE.md](CLAUDE.md)                             | invariants, where to change what, verified gotchas                   |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | data flow, decisions, layout                                         |
-| [docs/PARITY.md](docs/PARITY.md)                   | feature-by-feature status vs the pre-rewrite app                     |
-| [docs/DEPS.md](docs/DEPS.md)                       | why each dependency exists, with usage pinned to the installed major |
-| [docs/IMAGE_MODELS.md](docs/IMAGE_MODELS.md)       | which of the seven image models to use, measured on nine story beats |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | symptom → probe → fix                                                |
+| Document                                           | Purpose                                                                      |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [CLAUDE.md](CLAUDE.md)                             | invariants, where to change what, verified gotchas                           |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | data flow, decisions, layout                                                 |
+| [docs/PARITY.md](docs/PARITY.md)                   | feature-by-feature status vs the pre-rewrite app                             |
+| [docs/DEPS.md](docs/DEPS.md)                       | why each dependency exists, with usage pinned to the installed major         |
+| [docs/IMAGE_MODELS.md](docs/IMAGE_MODELS.md)       | which image model and LoRA to use, with measured times and per-beat accuracy |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | symptom → probe → fix                                                        |
 
 ```bat
 npm run verify     :: types + lint + unit tests

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from '$lib/shared/image.js';
 import {
 	DEFAULT_WORKFLOW,
+	EDIT_WORKFLOW,
 	GRAPHS,
 	T2I_WORKFLOWS,
 	fillGraph,
@@ -49,6 +50,7 @@ describe('registered graphs', () => {
 			'krea2-t2i',
 			'anima-turbo-t2i',
 			'flux2-klein-t2i',
+			'flux2-klein-nsfw-t2i',
 			'anima-fp16-t2i',
 			'krea2-anime-t2i',
 			'anima-base-t2i',
@@ -108,12 +110,51 @@ describe('registered graphs', () => {
 	});
 
 	it('picks a CLIP type each graph actually uses', () => {
-		// These are the strings ComfyUI's CLIPLoader accepts; a typo here is a 400 from ComfyUI.
-		// `qwen_image` is what Z-Image uses: ComfyUI routes by the encoder file's own text model, and only
-		// flux/flux2 would send a Qwen3-4B encoder to the wrong tokenizer, so the label is a free choice.
+		// These are the strings ComfyUI's CLIPLoader accepts; a typo here is a 400 from ComfyUI. `qwen_image`
+		// is what Z-Image uses: ComfyUI routes by the encoder file's own text model, so the label is a free
+		// choice as long as it is not flux/flux2, which would send a Qwen3-4B encoder to the wrong tokenizer.
 		const allowed = new Set(['krea2', 'flux2', 'stable_diffusion', 'qwen_image', 'lumina2']);
 		for (const [id, definition] of Object.entries(GRAPHS)) {
 			expect(allowed.has(String(definition.defaults.CLIP_TYPE)), id).toBe(true);
 		}
+	});
+
+	describe('edit graph', () => {
+		const template = () =>
+			JSON.parse(
+				readFileSync(join('workflows', `${GRAPHS[EDIT_WORKFLOW].file}.json`), 'utf8')
+			) as Record<string, { class_type: string; inputs: Record<string, unknown> }>;
+
+		it('is registered as an edit, so the text-to-image picker cannot offer it', () => {
+			expect(GRAPHS[EDIT_WORKFLOW].kind).toBe('edit');
+			expect(T2I_WORKFLOWS).not.toContain(EDIT_WORKFLOW);
+		});
+
+		it('loads the encoder with a GGUF-aware loader', () => {
+			// The flux clip is a GGUF quant; the plain loader answers "clip_name not in list" — the exact
+			// bug that wasted a benchmark run on the T2I graph, so the edit graph is guarded too.
+			const graph = template();
+			const loaders = Object.values(graph)
+				.filter((node) => /^CLIPLoader/.test(node.class_type))
+				.map((node) => node.class_type);
+			expect(loaders).toEqual(['CLIPLoaderGGUF']);
+		});
+
+		it('takes an instruction and an init image, and names its own output', () => {
+			const graph = template();
+			const serialised = JSON.stringify(graph);
+			expect(serialised).toContain('{{INSTRUCTION}}');
+			expect(serialised).toContain('{{INIT_IMAGE}}');
+			const prefixes = Object.values(graph)
+				.map((node) => node.inputs?.filename_prefix)
+				.filter((value): value is string => typeof value === 'string');
+			expect(prefixes).toEqual(['{{FILENAME_PREFIX}}']);
+		});
+
+		it('attaches the source latent, which is what makes it an edit and not a redraw', () => {
+			const classes = Object.values(template()).map((node) => node.class_type);
+			expect(classes).toContain('ReferenceLatent');
+			expect(classes).toContain('VAEEncode');
+		});
 	});
 });

@@ -185,3 +185,76 @@ In ComfyUI `output/`:
 | `Probe-ZImage-L07/L1/L13_*`                                                                      | LoRA strength sweep                                          |
 | `Probe-AnimaTurbo-cfg1/cfg25/cfg4/short_*`, `Probe-AnimaBase-cfg4_*`                             | the anima diagnosis                                          |
 | `Probe-KreaUnlock08/1_*`                                                                         | Krea2's own unlock LoRA                                      |
+
+---
+
+# Round 3 — LoRAs, instruction edits, and where the time actually goes
+
+Two things happened after round 2: the app grew a real edit feature, and five community LoRAs were measured.
+Both changed the answers.
+
+## Instruction edit is now a feature, not a benchmark note
+
+`workflows/flux2_klein_edit.json` had been sitting in the repo unregistered since the first commit. It is now
+`flux2-klein-edit`, behind `POST /api/images/edit` and the **Change with a sentence** button in the viewer.
+The browser sends `{imageId, instruction}` and nothing else — the source bytes are already on disk, so no
+1.5 MB round trip over Tailscale.
+
+First real run: an anima nude from the NSFW chat, instruction _"change the grey knit sweater into a black
+evening gown, keep the same face and pose"_ → the gown appeared, the face/hair/pose/room and the **anime art
+style** survived, 25.8 s cold (first FLUX.2 load inside the app). It is the only edit path that obeys: the
+generic img2img graph at denoise 0.55 changes nothing on the distilled models.
+
+## LoRAs measured
+
+| LoRA                        | File                                                 | Effect                                                                                  | Cost           |
+| --------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------- |
+| **Z-Image Turbo Lightning** | `Zed_Turbo_Lightning.safetensors` (34 MB)            | 8 steps → 4 with no visible loss; wide shots keep their composition                     | **−40 % time** |
+| **Klein Fixes (NSFW)**      | `FLUX_NSFW_Fix.safetensors` (176 MB, 4B build)       | FLUX.2 "nude" goes from a smooth mannequin with underwear on to an actual detailed nude | none           |
+| **Klein anatomy slider**    | `klein4B_slider_anatomy.safetensors` (11 MB)         | ± anatomy control on top; +0.5 was redundant beside the fix above                       | none           |
+| **Anima Highres/Aesthetic** | `anima-highres-aesthetic-boost.safetensors` (132 MB) | brighter, cleaner lighting; 1536 px without falling apart                               | +0.3 s         |
+| **Anima Detail Tweaker**    | `rendering_detailer_base10.safetensors` (88 MB)      | more material detail, fewer garbled corner texts                                        | +0.1 s         |
+
+All five loaded on our exact checkpoints: the anima pair targets hidden size 2048 and the Klein pair is the
+**4B** build (the popular 9B unlockers are a different tensor shape and will not load).
+
+Z-Image Mystic XXX + Lightning at 1.0/1.0 is still fully explicit with detailed anatomy — the two LoRAs
+compose, so the fastest and the spiciest Z-Image recipe are now the same one.
+
+## Speed, measured properly
+
+Round 2's numbers went through the app **with llama.cpp resident**, which starves ComfyUI of VRAM on an 8 GB
+card. These are direct to ComfyUI with the chat idle, three seeds per config, median of the warm runs:
+
+| Recipe               | Before           | After                              | Change                   |
+| -------------------- | ---------------- | ---------------------------------- | ------------------------ |
+| Z-Image Turbo        | 8.5 s (8 steps)  | **5.1 s** (4 steps + Lightning)    | −40 %                    |
+| Z-Image + Mystic XXX | 8.7 s (8 steps)  | **5.1 s** (4 steps + both LoRAs)   | −41 %                    |
+| FLUX.2 Klein         | 4.3 s (4 steps)  | **3.4 s** at 3 steps, same quality | −21 %                    |
+| FLUX.2 Klein NSFW    | —                | **4.2 s** (4 steps + fix)          | the LoRA is free         |
+| Krea2 Anime v14      | 13.6 s (8 steps) | **10.6 s** at 6 steps              | −22 %                    |
+| Anima Turbo + detail | 4.0 s (8 steps)  | **4.2 s**                          | +0.2 s for better detail |
+
+**The LLM costs more than any sampler setting.** With Stheno resident, every image above runs ~70 % slower
+because the 8 GB card has to shuffle weights. The app's idle unload is therefore the single biggest speed
+feature in the product — bigger than any LoRA.
+
+## What changed in the app
+
+- The picker now offers 9 entries; `z-image-turbo-t2i`, `z-image-mystic-t2i` and `anima-turbo-t2i` were
+  upgraded **in place** to the recipes above (same names, same look, half the time).
+- New entry: **FLUX.2 Klein NSFW (4B unlock)** — the only photoreal explicit model here that also edits.
+- New graphs: `z_image_turbo_lora2_t2i` (two LoRA slots), `flux2_klein_lora_t2i`, `anima_turbo_quality_t2i`.
+- `npm run doctor` now lists every LoRA the registry names and reports the ones ComfyUI cannot see.
+
+## Anima: the LoRA question, answered
+
+There is no LoRA that improves instruction following, and that is structural: a LoRA patches the diffusion
+transformer, while instruction following happens in the text encoder — the 0.6B `qwen_3_06b_base` in our
+build. What the community ships for Anima is what LoRAs can do: quality/detail sliders, step distillation, and
+hundreds of artist styles. The real upgrade for adherence is Anima 3.8B v1.1 (a 4B encoder, custom nodes,
+~5 GB more download), not a LoRA on the 2B.
+
+What _did_ help adherence, for free: **short prompts**. The same explicit ask as
+`two nude women kissing on a bed, explicit, realistic` — no framing tags, no quality soup — is the best
+explicit frame of this whole comparison, where the long prompt collapsed to a face at CFG 1, 2.5 and 4 alike.

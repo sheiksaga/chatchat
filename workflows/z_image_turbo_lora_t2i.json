@@ -126,7 +126,7 @@
   },
   "10": {
     "inputs": {
-      "lora_name": "{{LORA}}",
+      "lora_name": "{{LORA_NAME}}",
       "strength_model": "{{LORA_STRENGTH}}",
       "strength_clip": "{{LORA_STRENGTH}}",
       "model": [

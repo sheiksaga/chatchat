@@ -9,6 +9,8 @@
 		ExternalLink,
 		Paintbrush,
 		RotateCcw,
+		Send,
+		Sparkles,
 		Trash2,
 		X
 	} from '@lucide/svelte';
@@ -21,6 +23,7 @@
 		onclose,
 		onregenerate,
 		onedit,
+		oninstruct,
 		ondelete
 	}: {
 		images: ImageRow[];
@@ -29,10 +32,22 @@
 		onclose: () => void;
 		onregenerate: (image: ImageRow, seed?: number) => void;
 		onedit: (image: ImageRow) => void;
+		oninstruct: (image: ImageRow, instruction: string) => void;
 		ondelete: (image: ImageRow) => void;
 	} = $props();
 
 	let image = $derived(images[index]);
+	/** Instruction panel: hidden until asked for, because most of the time you just look at pictures. */
+	let instructing = $state(false);
+	let instruction = $state('');
+
+	function applyInstruction() {
+		const text = instruction.trim();
+		if (!text || !image) return;
+		oninstruct(image, text);
+		instruction = '';
+		instructing = false;
+	}
 
 	function step(delta: number) {
 		const next = index + delta;
@@ -127,6 +142,14 @@
 				<Paintbrush class="size-3.5" aria-hidden="true" />
 				Edit a region
 			</button>
+			<button
+				class="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 px-2.5 text-label transition-colors duration-150 hover:bg-white/10"
+				aria-expanded={instructing}
+				onclick={() => (instructing = !instructing)}
+			>
+				<Sparkles class="size-3.5" aria-hidden="true" />
+				Change with a sentence
+			</button>
 			<!-- Raw bytes in a new tab: an action, not a route, so `resolve()` does not apply. -->
 			<button
 				class="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/20 px-2.5 text-label transition-colors duration-150 hover:bg-white/10"
@@ -143,5 +166,31 @@
 				Delete
 			</button>
 		</div>
+		{#if instructing}
+			<form
+				class="flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 p-2"
+				onsubmit={(event) => {
+					event.preventDefault();
+					applyInstruction();
+				}}
+			>
+				<label class="sr-only" for="instruction">What should change?</label>
+				<input
+					id="instruction"
+					class="h-8 min-w-0 flex-1 rounded-md border border-white/20 bg-black/30 px-2.5 text-label text-white placeholder:text-white/40"
+					placeholder="black evening gown instead of the sweater"
+					bind:value={instruction}
+					autocomplete="off"
+				/>
+				<button
+					class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-white/20 px-2.5 text-label transition-colors duration-150 hover:bg-white/10 disabled:pointer-events-none disabled:opacity-40"
+					type="submit"
+					disabled={!instruction.trim()}
+				>
+					<Send class="size-3.5" aria-hidden="true" />
+					Apply
+				</button>
+			</form>
+		{/if}
 	{/if}
 </div>
