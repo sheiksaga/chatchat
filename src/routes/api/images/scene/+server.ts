@@ -45,7 +45,8 @@ export async function POST({ request }) {
 		character: getChatCharacter(database, chat.id) ?? null,
 		look: body.look ?? story.look ?? null,
 		shot: body.shot,
-		extra: body.extra
+		extra: body.extra,
+		workflow: body.workflow
 	});
 
 	return json({ ...scene, workflow: body.workflow });

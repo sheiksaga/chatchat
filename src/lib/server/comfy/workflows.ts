@@ -23,6 +23,8 @@ export interface GraphDefinition {
 	label: string;
 	/** Which capability the graph provides. */
 	kind: 't2i' | 'edit' | 'inpaint';
+	/** Registered but not offered in the UI picker. */
+	picker?: false;
 	defaults: GraphValues;
 }
 
@@ -230,6 +232,8 @@ export const ANIMA_FP16_DEFAULTS: GraphValues = {
 export const KREA2_ANIME_DEFAULTS: GraphValues = {
 	...KREA2_DEFAULTS,
 	MODEL: 'krea2Anime_v14_int4.safetensors',
+	// Round-3 benchmark: 6 steps measured -22 % and no visible quality loss.
+	STEPS: 6,
 	FILENAME_PREFIX: 'Krea2Anime'
 };
 
@@ -237,18 +241,22 @@ export const KREA2_ANIME_DEFAULTS: GraphValues = {
  * Anima **base** v1.0 — the undistilled model. It needs what distillation removes: many steps, a real
  * CFG weight and an actual negative prompt, which the turbo graphs cannot express (their unconditional
  * branch is zeroed). Hence `t2i_cfg.json`, the one graph with a `{{NEGATIVE}}` slot.
+ *
+ * Values are the model's documented recipe from the Anima prompting guidebook — er_sde sampler, ~35
+ * steps, and this exact negative. The `score_*` tags are the model's own quality scores and belong only
+ * in the negative: in the positive they pull the picture towards the score it names.
  */
 export const ANIMA_BASE_DEFAULTS: GraphValues = {
 	MODEL: 'anima-base-v1.0.safetensors',
 	CLIP: 'qwen_3_06b_base.safetensors',
 	CLIP_TYPE: 'stable_diffusion',
 	VAE: 'qwen_image_vae.safetensors',
-	SAMPLER: 'euler',
+	SAMPLER: 'er_sde',
 	SCHEDULER: 'simple',
-	STEPS: 24,
+	STEPS: 35,
 	CFG: 4.5,
 	NEGATIVE:
-		'worst quality, low quality, lowres, bad anatomy, bad hands, extra digits, watermark, text',
+		'worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration',
 	WIDTH: 832,
 	HEIGHT: 1216,
 	SEED: 1,
@@ -337,7 +345,7 @@ export const GRAPHS = {
 	},
 	'flux2-klein-nsfw-t2i': {
 		file: 'flux2_klein_lora_t2i',
-		label: 'FLUX.2 Klein NSFW (4B unlock)',
+		label: 'FLUX.2 Klein Unlocked (4B)',
 		kind: 't2i',
 		defaults: FLUX2_NSFW_DEFAULTS
 	},
@@ -357,6 +365,8 @@ export const GRAPHS = {
 		file: 't2i_cfg',
 		label: 'Anima Base (quality, slow)',
 		kind: 't2i',
+		// Still runnable through `POST /api/images` and `[[IMG]]`; just not worth a picker slot.
+		picker: false,
 		defaults: ANIMA_BASE_DEFAULTS
 	},
 	'z-image-turbo-t2i': {
@@ -367,7 +377,7 @@ export const GRAPHS = {
 	},
 	'z-image-mystic-t2i': {
 		file: 'z_image_turbo_lora2_t2i',
-		label: 'Z-Image + Mystic XXX NSFW',
+		label: 'Z-Image + Mystic XXX Unlocked',
 		kind: 't2i',
 		defaults: Z_IMAGE_MYSTIC_FAST_DEFAULTS
 	},
@@ -387,12 +397,26 @@ export const GRAPHS = {
 
 export type GraphId = keyof typeof GRAPHS;
 
-/** The graphs that generate a picture from text alone — what the image picker offers. */
-export const T2I_WORKFLOWS = (Object.keys(GRAPHS) as GraphId[]).filter(
-	(id) => GRAPHS[id].kind === 't2i'
-);
+/**
+ * Every graph that draws a picture from text alone, including the ones the picker hides.
+ *
+ * This is what `POST /api/images` validates against: a `picker: false` graph is still a working graph, it
+ * just does not deserve a picker slot. `T2I_WORKFLOWS` below is the UI list.
+ */
+export const T2I_GRAPH_IDS = (Object.keys(GRAPHS) as GraphId[]).filter((id) => {
+	// Widened on purpose: `as const satisfies` keeps each entry's own literal type, so `picker` only
+	// exists on the entries that set it and a bare `GRAPHS[id].picker` does not type-check.
+	const graph: GraphDefinition = GRAPHS[id];
+	return graph.kind === 't2i';
+});
 
-export const DEFAULT_WORKFLOW: GraphId = 'krea2-anime-t2i';
+/** The graphs the picker offers: `T2I_GRAPH_IDS` minus the hidden ones. */
+export const T2I_WORKFLOWS = T2I_GRAPH_IDS.filter((id) => {
+	const graph: GraphDefinition = GRAPHS[id];
+	return graph.picker !== false;
+});
+
+export const DEFAULT_WORKFLOW: GraphId = 'z-image-turbo-t2i';
 
 /** The graph behind "change this picture": one instruction, one source image. */
 export const EDIT_WORKFLOW: GraphId = 'flux2-klein-edit';

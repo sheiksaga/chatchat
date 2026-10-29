@@ -66,18 +66,19 @@ UI rules — type scale, motion, primitives, layout contract: `docs/UI.md`.
 
 ## Where to change what
 
-| Task                                        | File(s)                                                                                                             |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Add an LLM provider                         | `src/lib/server/backends/llm/<name>.ts`, register in `backends/llm/index.ts`, add id to `src/lib/shared/backend.ts` |
-| Change sampler defaults / `/props` handling | `src/lib/server/backends/llm/llamacpp.ts`, `src/lib/server/config.ts`                                               |
-| Change RP prompt assembly                   | `src/lib/server/prompts/rp.ts` (+ `rp.test.ts`)                                                                     |
-| Add a ComfyUI graph                         | `workflows/<name>.json` + mapping in `src/lib/server/comfy/workflows.ts`                                            |
-| Change DB shape                             | `src/lib/server/db/migrations.ts` — append only, bump `user_version`                                                |
-| Change a message/chat shape                 | `src/lib/shared/message.ts` / `chat.ts` → run `npm run check`                                                       |
-| Change chat UI                              | `src/lib/components/chat/*.svelte`                                                                                  |
-| Styles / theme tokens                       | `src/app.css` (`:root`, `.dark`, `@theme` — the type scale and animations live there)                               |
-| Add a UI primitive (dialog, toast, …)       | `src/lib/components/ui/<name>/`, see `docs/UI.md` §3                                                                |
-| Server routes                               | `src/routes/api/**/+server.ts`                                                                                      |
+| Task                                          | File(s)                                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Add an LLM provider                           | `src/lib/server/backends/llm/<name>.ts`, register in `backends/llm/index.ts`, add id to `src/lib/shared/backend.ts` |
+| Change sampler defaults / `/props` handling   | `src/lib/server/backends/llm/llamacpp.ts`, `src/lib/server/config.ts`                                               |
+| Change RP prompt assembly                     | `src/lib/server/prompts/rp.ts` (+ `rp.test.ts`)                                                                     |
+| Add a ComfyUI graph                           | `workflows/<name>.json` + mapping in `src/lib/server/comfy/workflows.ts`                                            |
+| Change DB shape                               | `src/lib/server/db/migrations.ts` — append only, bump `user_version`                                                |
+| Change a message/chat shape                   | `src/lib/shared/message.ts` / `chat.ts` → run `npm run check`                                                       |
+| Change chat UI                                | `src/routes/chat/[id]/ChatView.svelte`, `src/lib/components/chat/*.svelte`                                          |
+| Add a picture block / change where images sit | `src/lib/components/images/ImageBlock.svelte` + `placeImages()` in `src/lib/shared/image.ts`                        |
+| Styles / theme tokens                         | `src/app.css` (`:root`, `.dark`, `@theme` — the type scale and animations live there)                               |
+| Add a UI primitive (dialog, toast, …)         | `src/lib/components/ui/<name>/`, see `docs/UI.md` §3                                                                |
+| Server routes                                 | `src/routes/api/**/+server.ts`                                                                                      |
 
 ---
 
@@ -129,6 +130,18 @@ _notes/                PLAN.md, TODO.md, REWRITE_RESEARCH.md, model notes
   template expression — `class="… {x ? 'bg-card/60' : ''}"`.
 - `@tailwindcss/forms` paints its own blue focus ring on every field from a rule late in the base layer.
   The override is in `src/app.css` under `@layer components`; putting it in base loses on source order.
+  Reset **both** halves — the plugin sets `--tw-ring-color` _and_ `border-color` on `:focus`, and the border
+  is the visible one.
+- **Never give a native `<select>` a small fixed height.** The same plugin puts `padding: 0.5rem 0.75rem`
+  on every `select`, so `h-5`/`h-7` leaves a 4–12px content box and the 13px label is clipped to a slice of
+  glyphs. Use `src/lib/components/ui/select-menu/SelectMenu.svelte` for every one-of-N choice.
+- **SvelteKit reuses a page component when only the route parameter changes.** A `$state` initializer in
+  `/chat/[id]` therefore runs once, for the first chat — which is how one chat's pictures followed you into
+  the next. `+page.svelte` is a `{#key data.chat.id}` wrapper around `ChatView.svelte`; keep per-chat state
+  inside that key rather than resetting it by hand.
+- A picture belongs to a turn via `images.message_id`. Every generation path must send one (chip → its own
+  message, "of this moment"/`/image` → the newest reply, edit/inpaint → the source picture's message), or
+  the picture has to be placed by `created_at` in `placeImages()`.
 - **Icon-button accessible names are the e2e contract.** `getByRole(..., { name })` matches a substring, so
   `aria-label="Rename chat"` makes a sidebar row match `{ name: 'chat' }`. Keep names short, put the
   sentence in `title` (see `docs/UI.md` §6).
@@ -216,3 +229,12 @@ Behaviour that mattered is already encoded in tests: `prompts/rp.spec.ts`, `prom
   routes by the encoder file's own text model (Qwen3-4B → Z-Image tokenizer) and only `flux`/`flux2` would
   mis-route it, so the graph uses `qwen_image` as the least misleading label. Its latent is Flux-format
   (16-channel), so the graph needs `EmptySD3LatentImage`, and the VAE is the Flux `ae.safetensors`.
+- **Three picker entries depend on LoRA files that live in `ComfyUI/models/loras/`** —
+  `Zed_Turbo_Lightning.safetensors`, `FLUX_NSFW_Fix.safetensors`, `Mystic-XXX-ZIT-V7.safetensors`, plus the
+  Anima quality pair (`anima-highres-aesthetic-boost`, `rendering_detailer_base10`). `npm run doctor` names
+  any the registry references but ComfyUI cannot see. A missing LoRA is a **hard ComfyUI error on purpose**:
+  there is no silent fallback, because a picture quietly drawn without the LoRA you asked for is worse than
+  a failed request.
+- **ComfyUI caches by graph hash.** Re-submitting the same prompt with the same seed and the same graph
+  returns in ~0.4 s — that is a cache hit, not a fast model. Vary the seed (or the graph) when timing, or
+  you will record 0.4 s for every recipe you bench.

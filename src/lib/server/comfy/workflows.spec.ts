@@ -13,6 +13,7 @@ import {
 	DEFAULT_WORKFLOW,
 	EDIT_WORKFLOW,
 	GRAPHS,
+	T2I_GRAPH_IDS,
 	T2I_WORKFLOWS,
 	fillGraph,
 	isT2iWorkflow,
@@ -53,7 +54,6 @@ describe('registered graphs', () => {
 			'flux2-klein-nsfw-t2i',
 			'anima-fp16-t2i',
 			'krea2-anime-t2i',
-			'anima-base-t2i',
 			'z-image-turbo-t2i',
 			'z-image-mystic-t2i'
 		]);
@@ -61,6 +61,15 @@ describe('registered graphs', () => {
 		expect(isT2iWorkflow('anima-inpaint')).toBe(false);
 		expect(isT2iWorkflow('not-a-graph')).toBe(false);
 		expect(T2I_WORKFLOWS).toContain(DEFAULT_WORKFLOW);
+	});
+
+	it('keeps anima-base runnable while leaving it out of the picker', () => {
+		// `picker: false`, not a removed graph: `/api/images` and the `[[IMG]]` marker still reach it,
+		// because the route validates against T2I_GRAPH_IDS rather than the picker list.
+		expect(GRAPHS['anima-base-t2i']).toBeTruthy();
+		expect(T2I_WORKFLOWS).not.toContain('anima-base-t2i');
+		expect(T2I_GRAPH_IDS).toContain('anima-base-t2i');
+		expect(isT2iWorkflow('anima-base-t2i')).toBe(true);
 	});
 
 	/**

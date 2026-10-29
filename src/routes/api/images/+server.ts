@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { db } from '$lib/server/db/index.js';
 import { listImages } from '$lib/server/db/images.js';
 import { generateImage } from '$lib/server/images/generate.js';
-import { DEFAULT_WORKFLOW, T2I_WORKFLOWS, type GraphId } from '$lib/server/comfy/workflows.js';
+import { DEFAULT_WORKFLOW, T2I_GRAPH_IDS, type GraphId } from '$lib/server/comfy/workflows.js';
 
 const bodySchema = z.object({
 	chatId: z.string().min(1).optional(),
@@ -27,9 +27,9 @@ const bodySchema = z.object({
 	height: z.number().int().min(256).max(2048).optional(),
 	steps: z.number().int().min(1).max(60).optional(),
 	seed: z.number().int().min(0).optional(),
-	/** Which image model to use; the UI offers exactly these. */
+	/** Which image model to use. Every text-to-image graph is valid here, picker-visible or not. */
 	workflow: z
-		.enum(T2I_WORKFLOWS as [string, ...string[]])
+		.enum(T2I_GRAPH_IDS as [string, ...string[]])
 		.default(DEFAULT_WORKFLOW) as z.ZodType<GraphId>
 });
 

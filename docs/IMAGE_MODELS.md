@@ -141,13 +141,13 @@ a prompt-assembly problem. Two candidate fixes (not applied yet):
 
 ## Recommendations
 
-| Use                                     | Model                | Why                                                      |
-| --------------------------------------- | -------------------- | -------------------------------------------------------- |
-| Everyday story images                   | **Z-Image Turbo**    | 14.6 s, best props/hands/objects, 87 % obedience         |
-| Story images plus skin/explicit detail  | **Z-Image + Mystic** | same speed, better anatomy, 91 % obedience               |
-| Anime, two characters, explicit anatomy | **Krea2 Anime**      | 18.4 s, most reliable anime anatomy, own unlock LoRA     |
-| Photoreal + real edits                  | **FLUX.2 Klein**     | 8.4 s, only usable instruction editor                    |
-| Drafts, quick iteration                 | **Anima Turbo**      | 4.2 s, but short prompts only, and it will insert a face |
+| Use                                     | Model                | Why                                                       |
+| --------------------------------------- | -------------------- | --------------------------------------------------------- |
+| Everyday story images                   | **Z-Image Turbo**    | 14.6 s, best props/hands/objects, 87 % obedience          |
+| Story images plus skin/explicit detail  | **Z-Image + Mystic** | same speed, better anatomy, 91 % obedience                |
+| Anime, two characters, explicit anatomy | **Krea2 Anime**      | 18.4 s, most reliable anime anatomy, own unlock LoRA      |
+| Photoreal + real edits                  | **FLUX.2 Klein**     | 8.4 s, only usable instruction editor                     |
+| Drafts, quick iteration                 | **Anima Turbo**      | 4.2 s, but hybrid prompts only, and it will insert a face |
 
 ---
 
@@ -250,7 +250,13 @@ which is still fast enough to just take the picture.
 
 - The picker now offers 9 entries; `z-image-turbo-t2i`, `z-image-mystic-t2i` and `anima-turbo-t2i` were
   upgraded **in place** to the recipes above (same names, same look, half the time).
-- New entry: **FLUX.2 Klein NSFW (4B unlock)** — the only photoreal explicit model here that also edits.
+- New entry: **FLUX.2 Klein Unlocked (4B)** — the only photoreal explicit model here that also edits.
+
+> **Naming (2026-10-29):** the picker labels these two **Unlocked** (“Z-Image + Mystic XXX Unlocked”,
+> “FLUX.2 Klein Unlocked”), which matches `_notes/PHASE4_KREA2_UNLOCKED.md`. The ids keep `nsfw`/`mystic`
+> because every image row ever drawn stores them in `images.workflow`; renaming ids would strand that
+> history. The file names below are ComfyUI's and are unchanged.
+
 - New graphs: `z_image_turbo_lora2_t2i` (two LoRA slots), `flux2_klein_lora_t2i`, `anima_turbo_quality_t2i`.
 - `npm run doctor` now lists every LoRA the registry names and reports the ones ComfyUI cannot see.
 
@@ -262,6 +268,113 @@ build. What the community ships for Anima is what LoRAs can do: quality/detail s
 hundreds of artist styles. The real upgrade for adherence is Anima 3.8B v1.1 (a 4B encoder, custom nodes,
 ~5 GB more download), not a LoRA on the 2B.
 
-What _did_ help adherence, for free: **short prompts**. The same explicit ask as
-`two nude women kissing on a bed, explicit, realistic` — no framing tags, no quality soup — is the best
-explicit frame of this whole comparison, where the long prompt collapsed to a face at CFG 1, 2.5 and 4 alike.
+What _did_ help adherence, for free: **the right prompt shape** — and it is not "short", it is **hybrid**.
+The round-2 note on this page said Anima "wants short prompts". That was the wrong diagnosis: what
+collapsed at CFG 1, 2.5 and 4 alike was **long tag soup carrying contradictory framing tags**
+(`... explicit sex ... close-up, portrait, detailed face`) — the 0.6B encoder keeps the last, strongest
+tag cluster and drops the rest. Anima's own guidance (and the community guide cited below) is a **hybrid
+prompt**: a Danbooru tag block for identity / clothing / count, then one or two prose sentences for the
+action, and **exactly one** camera tag. The bare ask `two nude women kissing on a bed, explicit, realistic`
+scored well because it was _unambiguous_, not because it was short — the same content as tags plus
+sentences scores the same and controls appearance better.
+
+Source: [The Ultimate Anima Prompting Guidebook](https://civitai.com/articles/35368/the-ultimate-anima-prompting-guidebook-all-you-need).
+
+---
+
+# Prompting rules per model
+
+The prompt builder in `src/lib/server/prompts/scene.ts` is model-aware: the same beat is written
+differently depending on which workflow will draw it. These are the shapes it emits.
+
+- **`generic` / `krea2` / `flux2`** — Danbooru-style tag soup, unchanged from earlier rounds. A model in
+  this group reads a comma-separated list and ignores nothing; prose costs tokens and buys nothing.
+- **`anima*`** — the official hybrid order, in this exact sequence: `masterpiece, best quality, highres`,
+  then a safety tag (`safe` / `nsfw` / `explicit`), then a subject count (`1girl, solo` / `1boy, solo` /
+  `2girls`), then appearance tags, then **one prose sentence** of action taken from the transcript, then
+  **exactly one** camera tag, then the chat's `look`, then `detailed lighting`, then the user's own extra
+  tags. No `score_*` tags — they are a Danbooru ordering artifact, not a quality hint, and in Anima's
+  positive they only steal attention from the subject.
+- **`z-image*`** — one structured prose paragraph, in the order shot → subject/appearance → action →
+  environment → lighting/style → technical/cleanup (`no text, no watermark`). 80–250 words, no tag soup.
+
+Two cross-cutting rules:
+
+- The close framing no longer emits `portrait, detailed face`. It cropped explicit scenes to face
+  close-ups (see the round-2 framing bug), so the tag is gone; `close-up` alone is enough.
+- A framing the user supplies in `extra` **suppresses** the shot tag entirely. A prompt cannot carry two
+  conflicting framings — that is what the 0.6B encoder and every distilled sampler resolve by obeying the
+  last one.
+
+## Anima's official defaults
+
+| Knob                | Anima Base                      | Anima Turbo        |
+| ------------------- | ------------------------------- | ------------------ |
+| Sampler / scheduler | `er_sde`                        | `er_sde`           |
+| Steps               | ~35                             | 8–12               |
+| CFG                 | 4.5                             | 1                  |
+| Negative            | the model's documented negative | the documented one |
+| Resolution          | 512–1536 (long side)            | 512–1536           |
+
+Anima Base now runs that recipe rather than a generic 20-step euler pass. `anima-base-t2i` is no longer
+listed in the picker (it stays reachable through the API and the `/image` marker), and the default image
+model is now `z-image-turbo-t2i`. Krea2 Anime runs 6 steps.
+
+Never put `score_*` tags in an Anima positive, even as "quality" padding.
+
+## Z-Image Turbo: prose, and why "regenerate" is not enough
+
+- **Long structured prose beats tag soup.** One paragraph of **80–250 words** in the order shot →
+  subject/appearance → action → environment → lighting/style → technical/cleanup describes the beat more
+  reliably than the same content as tags, and the cleanup clause (`no text, no watermark`) is written as
+  part of the sentence rather than as a tag.
+- **At CFG 1 the negative prompt is cancelled.** ComfyUI's CFG maths subtracts `negative × 0`, so a
+  distilled sampler at CFG 1 cannot honour a negative at all. Anything you want excluded has to be
+  **phrased positively inside the prompt** ("plain seamless background", "clean unmarked skin"), not
+  appended to the negative. Keep the negative field for CFG > 1 graphs only.
+- **Steps: 8–12 is the official recipe**; we run **4 with the Lightning LoRA** and verified visually that
+  nothing is lost (round 3, wide shots keep composition). Treat 4 as an app decision, not the model's.
+- **The same prompt with a different seed renders nearly identical images.** Confirmed in the model's own
+  discussion thread — the distilled sampler at 4–8 steps has very little seed entropy left. So pressing
+  "regenerate" does nothing; a new _picture_ needs a changed **prompt**, not a changed seed. That also
+  means a single-seed A/B between two prompts measures almost nothing (see the method note below).
+
+Sources: [Z-Image Turbo prompting notes](https://gist.github.com/illuminatianon/c42f8e57f1e3ebf037dd58043da9de32),
+[Tongyi-MAI/Z-Image-Turbo discussion #8](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/discussions/8).
+
+## Method note: seeds before conclusions
+
+A model or prompt comparison needs **at least 4 seeds per prompt** — single-seed differences under ~10 %
+are noise, on Z-Image especially (where seeds barely move the latent). `E:/tmp/seeds.mjs` exists to enforce
+this when timing or comparing outside the app.
+
+# Round 4 — the prompt dialects, checked on real images
+
+Ten scenes through `POST /api/images/scene` → `/api/images`, two chats (a bakery beat and an explicit
+bedroom beat), three workflows, ComfyUI in auto-VRAM mode (~6.3 s warm on Z-Image, ~5.3 s warm on Anima).
+Contact sheet: `E:/tmp/sheets/prompts-v2.jpg`.
+
+**What the rewrite fixed, visible in the output:**
+
+- **Close framing is no longer a face filler.** Dropping `portrait, detailed face` from the close tag produces
+  an upper-body close-up with the room still in it, instead of a head-and-shoulders crop of a scene that was
+  about hands, a bed, or a fight.
+- **`explicit` is now sent when the scene is explicit.** The safety word reads the chat's `look` as well as the
+  transcript, because round-2 chats keep wardrobe/anatomy tags there; before that fix the prompt said `safe`
+  while the look said `completely nude`, and the two arguments cancelled out.
+- **A user's own framing wins outright.** `extra: "wide shot from behind, looking out the window"` suppressed
+  the shot tag and produced exactly that shot — the prompt never carries two framings.
+- **Z-Image stopped collapsing wide beats onto a grey studio backdrop.** Environment survives now. It still
+  renders a "wide establishing shot of a person" as a medium shot of that person: the _setting_ is obeyed, the
+  _distance_ is not. That is the model, not the prompt.
+
+**Known gaps, in order of how much they annoy:**
+
+- Z-Image wide framing (above). Use Anima for genuinely wide beats, or add `full body` to `extra`.
+- At CFG 1 nobody obeying a negative means Z-Image will happily add a second figure to a close-up; Anima with
+  its count tag (`1girl, solo`) does not.
+- `medium shot, upper body` reads as head-to-thigh on Anima. Harmless, but the three shots are not evenly spaced.
+
+**Timings do depend on how ComfyUI was started.** `start-comfy.bat` (auto VRAM) is the correct launcher for the
+LoRA graphs; `start-comfy-turbo.bat` (`--highvram`) thrashes with any LoRA loaded. The round-3 numbers and the
+picker labels assume auto mode and a warm model: a run right after a model switch costs 10–17 s once.

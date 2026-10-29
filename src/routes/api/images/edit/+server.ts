@@ -20,6 +20,8 @@ const bodySchema = z.object({
 	imageId: z.string().min(1),
 	instruction: z.string().trim().min(1).max(2000),
 	chatId: z.string().min(1).optional(),
+	/** Which message the result belongs under; defaults to the source picture's message. */
+	messageId: z.string().min(1).nullable().optional(),
 	steps: z.number().int().min(1).max(20).optional(),
 	seed: z.number().int().min(0).optional()
 });
@@ -55,6 +57,9 @@ export async function POST({ request }) {
 					width: source.width ?? undefined,
 					height: source.height ?? undefined,
 					chatId: parsed.data.chatId ?? source.chat_id ?? null,
+					// An edit is a new picture of the *same* moment, so it lands beside its source.
+					messageId:
+						parsed.data.messageId === undefined ? source.message_id : parsed.data.messageId,
 					steps: parsed.data.steps,
 					seed: parsed.data.seed,
 					onProgress: (progress) =>
