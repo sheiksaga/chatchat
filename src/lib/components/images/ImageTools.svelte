@@ -1,29 +1,48 @@
 <!--
-	Images for one chat: a thumbnail strip, a full-screen viewer, and the mask editor.
+	The picture controls for one chat: which image model, "of this moment", progress, and the two
+	full-screen overlays (viewer, mask editor).
 
-	The component owns the whole lifecycle so the chat page only has to ask it to `generate()`. Images
-	arrive from the server load and are appended locally as they finish, so a fresh picture appears
-	without a full page reload.
+	What it deliberately does **not** do any more is display the pictures. They belong to a message, so
+	`ImageBlock` renders them inside the transcript (prompt above, image below); a strip docked above the
+	composer followed the reader instead of the conversation. This component owns the *job*, the page owns
+	the list — `onadded` hands a finished picture back so it can be appended to the transcript.
+
+	Images are grouped by message: `targetMessageId` is the message a new picture is drawn under, so a
+	chat's pictures never turn up under an unrelated turn, and never in another chat.
 -->
 <script lang="ts">
 	import { ImagePlus, TriangleAlert, X } from '@lucide/svelte';
-	import type { ImageRequest } from '$lib/shared/image.js';
-	import type { ImageRow } from '$lib/server/db/images.js';
+	import type { ImageRecord, ImageRequest } from '$lib/shared/image.js';
 	import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS, type ImageModelId } from '$lib/shared/image.js';
 	import IconButton from '$lib/components/ui/icon-button/icon-button.svelte';
+	import SelectMenu from '$lib/components/ui/select-menu/SelectMenu.svelte';
 	import ImageViewport from './ImageViewport.svelte';
 	import MaskEditor from './MaskEditor.svelte';
 
-	let { chatId, images = $bindable([]) }: { chatId: string; images?: ImageRow[] } = $props();
+	let {
+		chatId,
+		images = $bindable([]),
+		/** The message a picture drawn now belongs under (the last reply). */
+		targetMessageId = null,
+		/** Called after a job adds a picture, so the page can keep it in view. */
+		onadded
+	}: {
+		chatId: string;
+		images?: ImageRecord[];
+		targetMessageId?: string | null;
+		onadded?: (image: ImageRecord) => void;
+	} = $props();
 
-	/** Which image model to draw with. Remembered for the session; the picker is one <select>. */
+	/** Which image model to draw with. Remembered for the session; the picker is one popover. */
 	let workflow = $state<ImageModelId>(DEFAULT_IMAGE_MODEL);
 	let viewing = $state<number | null>(null);
-	let editing = $state<ImageRow | null>(null);
-	let busy = $state<{ value: number; max: number } | null>(null);
+	let editing = $state<ImageRecord | null>(null);
+	let busy = $state<{ value: number; max: number; what: string } | null>(null);
 	let error = $state<string | null>(null);
 
 	const percent = $derived(busy && busy.max > 0 ? Math.min(100, (busy.value / busy.max) * 100) : 0);
+
+	const modelOptions = IMAGE_MODELS.map((model) => ({ value: model.id, label: model.label }));
 
 	const shots = [
 		['wide', 'Wide'],
@@ -31,29 +50,48 @@
 		['close', 'Close-up']
 	] as const;
 
-	/** Generate from a typed `/image …` command or from an `[[IMG: …]]` chip under a reply. */
-	export async function generate(request: ImageRequest) {
+	/**
+	 * Generate one picture from a typed `/image …` command or from a `[[IMG: …]]` chip under a reply.
+	 * `messageId` is the message it will appear under once it finishes.
+	 */
+	export async function generate(request: ImageRequest, messageId?: string | null) {
 		if (busy) return;
-		await runJob('/api/images', { chatId, workflow, ...request });
+		await runJob('/api/images', {
+			chatId,
+			messageId: messageId ?? targetMessageId ?? undefined,
+			workflow,
+			...request
+		});
+	}
+
+	/** Open the viewer on a picture the transcript is already showing. */
+	export function open(imageId: string) {
+		const index = images.findIndex((image) => image.id === imageId);
+		if (index >= 0) viewing = index;
 	}
 
 	/**
 	 * "Change this picture." The server reads the source bytes and talks to ComfyUI's edit graph; we only
 	 * send the id and the sentence, so this is cheap even over a phone connection.
 	 */
-	async function editWithInstruction(image: ImageRow, instruction: string) {
+	async function editWithInstruction(image: ImageRecord, instruction: string) {
 		if (busy) return;
 		viewing = null;
-		await runJob('/api/images/edit', { chatId, imageId: image.id, instruction });
+		await runJob('/api/images/edit', {
+			chatId,
+			imageId: image.id,
+			messageId: image.message_id,
+			instruction
+		});
 	}
 
 	/**
 	 * One image job: POST, then read SSE frames until `done` or `error`. Shared by generate and edit
 	 * because both endpoints answer in exactly the same shape.
 	 */
-	async function runJob(endpoint: string, body: unknown) {
+	async function runJob(endpoint: string, body: Record<string, unknown>) {
 		error = null;
-		busy = { value: 0, max: 1 };
+		busy = { value: 0, max: 1, what: String(body.prompt ?? body.instruction ?? 'picture') };
 
 		try {
 			const response = await fetch(endpoint, {
@@ -82,13 +120,18 @@
 						type: 'progress' | 'done' | 'error';
 						value?: number;
 						max?: number;
-						image?: ImageRow;
+						image?: ImageRecord;
 						message?: string;
 					};
 					if (event.type === 'progress') {
-						busy = { value: event.value ?? 0, max: event.max ?? 1 };
+						busy = {
+							value: event.value ?? 0,
+							max: event.max ?? 1,
+							what: busy?.what ?? 'picture'
+						};
 					} else if (event.type === 'done' && event.image) {
 						images = [...images, event.image];
+						onadded?.(event.image);
 					} else if (event.type === 'error') {
 						error = event.message ?? 'generation failed';
 					}
@@ -117,76 +160,77 @@
 		await generate({ prompt: scene.prompt, width: scene.width, height: scene.height });
 	}
 
-	/** Regenerate: same prompt, new seed unless the caller pinned one. */
-	function regenerate(image: ImageRow, pinnedSeed?: number) {
-		void generate({
-			prompt: image.prompt ?? '',
-			width: image.width ?? undefined,
-			height: image.height ?? undefined,
-			seed: pinnedSeed
-		});
+	/** Regenerate: same prompt, new seed unless the caller pinned one, under the same message. */
+	export function regenerate(image: ImageRecord, pinnedSeed?: number) {
+		void generate(
+			{
+				prompt: image.prompt ?? '',
+				width: image.width ?? undefined,
+				height: image.height ?? undefined,
+				seed: pinnedSeed
+			},
+			image.message_id
+		);
+	}
+
+	/** Paint over part of a picture (opens the mask editor). */
+	export function edit(image: ImageRecord) {
+		viewing = null;
+		editing = image;
+	}
+
+	export async function remove(image: ImageRecord) {
+		await fetch(`/api/images/${image.id}`, { method: 'DELETE' });
+		images = images.filter((candidate) => candidate.id !== image.id);
+		viewing = null;
 	}
 </script>
 
-<section class="flex flex-col gap-2 border-t border-border/50 pt-2.5">
+<div class="flex flex-col gap-1.5 border-t border-border/50 pt-2">
 	<div class="flex flex-wrap items-center gap-1.5">
-		<label class="me-1 inline-flex items-center gap-1.5 text-label text-muted-foreground">
+		<span class="inline-flex items-center gap-1.5 text-label text-muted-foreground">
 			<ImagePlus class="size-3.5" aria-hidden="true" />
-			<span class="sr-only">Image model</span>
-			<select
-				class="h-7 rounded-md border border-border/70 bg-card/40 px-1.5 text-label text-foreground"
+			<SelectMenu
+				label="Image model"
+				options={modelOptions}
 				bind:value={workflow}
-				aria-label="Image model"
-			>
-				{#each IMAGE_MODELS as model (model.id)}
-					<option value={model.id}>{model.label}</option>
-				{/each}
-			</select>
-		</label>
-		<span class="text-label text-muted-foreground">of this moment</span>
-		{#each shots as [shot, label] (shot)}
-			<button
-				class="inline-flex h-7 items-center rounded-md border border-border/70 bg-card/40 px-2.5 text-label text-muted-foreground transition-[color,background-color,border-color,transform] duration-150 ease-soft hover:-translate-y-px hover:border-foreground/25 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-				disabled={!!busy}
-				onclick={() => generateScene(shot)}>{label}</button
-			>
-		{/each}
-		<span class="ms-auto text-label text-muted-foreground/70">
+				placeholder="no image model"
+				class="max-w-[17rem] border-border/70 bg-card/40"
+			/>
+		</span>
+
+		<span class="flex items-center gap-1.5">
+			<span class="text-label text-muted-foreground/80">of this moment</span>
+			{#each shots as [shot, label] (shot)}
+				<button
+					class="inline-flex h-7 items-center rounded-md border border-border/70 bg-card/40 px-2.5 text-label text-muted-foreground transition-[color,background-color,border-color,transform] duration-150 ease-soft hover:-translate-y-px hover:border-foreground/25 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+					disabled={!!busy}
+					onclick={() => generateScene(shot)}>{label}</button
+				>
+			{/each}
+		</span>
+
+		<span class="ms-auto hidden text-label text-muted-foreground/70 sm:inline">
 			or type <code class="font-mono text-foreground/80">/image …</code>
 		</span>
 	</div>
 
-	{#if images.length || busy}
-		<div class="flex items-center gap-2 overflow-x-auto pb-1">
-			{#each images as image, index (image.id)}
-				<button
-					class="group/img relative size-16 shrink-0 overflow-hidden rounded-lg border border-border/70 transition-[transform,border-color] duration-150 ease-soft hover:-translate-y-0.5 hover:border-foreground/30"
-					title={image.prompt ?? 'Open picture'}
-					onclick={() => (viewing = index)}
-				>
-					<img
-						class="h-full w-full object-cover transition-transform duration-200 ease-soft group-hover/img:scale-[1.06]"
-						src="/api/images/{image.id}"
-						alt={image.prompt ?? 'generated image'}
-					/>
-				</button>
-			{/each}
-
-			{#if busy}
+	{#if busy}
+		<div
+			class="flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5"
+		>
+			<span class="min-w-0 flex-1 truncate text-label text-muted-foreground">
+				Drawing <span class="text-foreground/80">{busy.what}</span>
+			</span>
+			<span class="shrink-0 text-label text-muted-foreground/70 tabular-nums">
+				{busy.value}/{busy.max}
+			</span>
+			<div class="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
 				<div
-					class="flex h-16 min-w-52 flex-col justify-center gap-1.5 rounded-lg border border-border/70 px-3"
-				>
-					<span class="text-label text-muted-foreground">
-						Generating {busy.value}/{busy.max}
-					</span>
-					<div class="h-1 w-full overflow-hidden rounded-full bg-muted">
-						<div
-							class="progress-strip h-full rounded-full bg-foreground/80 transition-[width] duration-300 ease-soft"
-							style="width: {percent}%"
-						></div>
-					</div>
-				</div>
-			{/if}
+					class="progress-strip h-full rounded-full bg-foreground/80 transition-[width] duration-300 ease-soft"
+					style="width: {percent}%"
+				></div>
+			</div>
 		</div>
 	{/if}
 
@@ -215,11 +259,7 @@
 				editing = image;
 			}}
 			oninstruct={(image, instruction) => void editWithInstruction(image, instruction)}
-			ondelete={async (image) => {
-				await fetch(`/api/images/${image.id}`, { method: 'DELETE' });
-				images = images.filter((candidate) => candidate.id !== image.id);
-				viewing = null;
-			}}
+			ondelete={(image) => void remove(image)}
 		/>
 	{/if}
 
@@ -227,11 +267,13 @@
 		<MaskEditor
 			image={editing}
 			{chatId}
+			messageId={editing.message_id}
 			onclose={() => (editing = null)}
 			onsaved={(image) => {
 				images = [...images, image];
+				onadded?.(image);
 				editing = null;
 			}}
 		/>
 	{/if}
-</section>
+</div>

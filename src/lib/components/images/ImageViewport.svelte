@@ -14,7 +14,7 @@
 		Trash2,
 		X
 	} from '@lucide/svelte';
-	import type { ImageRow } from '$lib/server/db/images.js';
+	import type { ImageRecord } from '$lib/shared/image.js';
 
 	let {
 		images,
@@ -26,14 +26,14 @@
 		oninstruct,
 		ondelete
 	}: {
-		images: ImageRow[];
+		images: ImageRecord[];
 		index: number;
 		onindex: (next: number) => void;
 		onclose: () => void;
-		onregenerate: (image: ImageRow, seed?: number) => void;
-		onedit: (image: ImageRow) => void;
-		oninstruct: (image: ImageRow, instruction: string) => void;
-		ondelete: (image: ImageRow) => void;
+		onregenerate: (image: ImageRecord, seed?: number) => void;
+		onedit: (image: ImageRecord) => void;
+		oninstruct: (image: ImageRecord, instruction: string) => void;
+		ondelete: (image: ImageRecord) => void;
 	} = $props();
 
 	let image = $derived(images[index]);

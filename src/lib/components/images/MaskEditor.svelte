@@ -5,18 +5,21 @@
 	exactly what the LLLite inpaint graph expects (white = repaint), so no server-side mask maths.
 -->
 <script lang="ts">
-	import type { ImageRow } from '$lib/server/db/images.js';
+	import type { ImageRecord } from '$lib/shared/image.js';
 
 	let {
 		image,
 		chatId,
+		/** The message the result belongs under — the source picture's own message. */
+		messageId = null,
 		onclose,
 		onsaved
 	}: {
-		image: ImageRow;
+		image: ImageRecord;
 		chatId: string;
+		messageId?: string | null;
 		onclose: () => void;
-		onsaved: (image: ImageRow) => void;
+		onsaved: (image: ImageRecord) => void;
 	} = $props();
 
 	let brush = $state(48);
@@ -88,9 +91,9 @@
 			form.set('mask', maskBlob, 'mask.png');
 			form.set('prompt', prompt);
 			form.set('chatId', chatId);
-			form.set('messageId', '');
+			form.set('messageId', messageId ?? '');
 			const response = await fetch('/api/images/inpaint', { method: 'POST', body: form });
-			const body = (await response.json()) as { image?: ImageRow; error?: string };
+			const body = (await response.json()) as { image?: ImageRecord; error?: string };
 			if (!response.ok || !body.image) {
 				error = body.error ?? `inpaint failed: ${response.status}`;
 				return;
