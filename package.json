@@ -1,10 +1,10 @@
 {
 	"name": "chatchat",
 	"private": true,
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"type": "module",
 	"engines": {
-		"node": ">=22"
+		"node": ">=22.13"
 	},
 	"scripts": {
 		"dev": "vite dev",
@@ -25,7 +25,8 @@
 		"import:cards": "tsx tools/import-cards.ts",
 		"test:e2e": "playwright test",
 		"test:e2e:ui": "playwright test --ui",
-		"release:zip": "tar -a -c -f dist/chatchat.zip --exclude data --exclude legacy --exclude node_modules --exclude dist --exclude _notes --exclude .git --exclude .svelte-kit --exclude .e2e-data --exclude test-results ."
+		"release:zip": "node -e \"require('node:fs').mkdirSync('dist',{recursive:true})\" && tar -a -c -f dist/chatchat.zip --exclude data --exclude legacy --exclude node_modules --exclude dist --exclude _notes --exclude .git --exclude .svelte-kit --exclude .e2e-data --exclude test-results .",
+		"release:check": "node tools/check-zip.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

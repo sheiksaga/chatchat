@@ -1,8 +1,8 @@
 # chatchat
 
 A local chat app for llama.cpp (and any OpenAI-compatible server), with SillyTavern character
-cards, lorebooks and — soon — ComfyUI image generation. It runs on your own machine, needs no
-account, and the only network traffic it makes is to the model server you point it at.
+cards, lorebooks and ComfyUI image generation. It runs on your own machine, needs no account, and
+the only network traffic it makes is to the servers you point it at.
 
 - **Local first.** No cloud, no telemetry, no CDN. The browser talks only to this app.
 - **LAN ready.** Start it on the desktop and use it from your phone over the same network (or Tailscale).
@@ -12,7 +12,8 @@ account, and the only network traffic it makes is to the model server you point 
 
 ## Start it
 
-1. Install [Node.js 22 or newer](https://nodejs.org).
+1. Install [Node.js 22.13 or newer](https://nodejs.org) (24 LTS recommended — the database uses the
+   built-in `node:sqlite`, which needs no flag from 22.13 on).
 2. Start your model server — llama.cpp with `--models-dir` (router mode) is the default, LM Studio works too.
 3. Double-click **`start-chatchat.bat`**. The first run installs dependencies and builds (a few
    minutes); later runs start immediately.
