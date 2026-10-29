@@ -6,6 +6,7 @@ import { backendFor } from '$lib/server/backends/registry.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
 import { listImages } from '$lib/server/db/images.js';
 import { messageStatsSchema, type ChatDetail, type ChatSummary } from '$lib/shared/chat.js';
+import type { ImageRecord } from '$lib/shared/image.js';
 import type { PageServerLoad } from './$types.js';
 
 export const load: PageServerLoad = ({ params }) => {
@@ -49,6 +50,10 @@ export const load: PageServerLoad = ({ params }) => {
 	const provider = config.activeProvider;
 	const providerConfig = config.providers.find((p) => p.id === provider);
 
+	// Typed as the browser-facing shape on purpose: a page load must not leak `file`/`mime`/`meta`
+	// into the bundle's idea of what a picture is.
+	const images: ImageRecord[] = listImages(database, chat.id);
+
 	return {
 		chat: detail,
 		chats,
@@ -59,6 +64,6 @@ export const load: PageServerLoad = ({ params }) => {
 		// The idle VRAM release only exists where the backend has an unload route.
 		caps: providerConfig ? backendFor(providerConfig).caps : null,
 		character: getChatCharacter(database, chat.id) ?? null,
-		images: listImages(database, chat.id)
+		images
 	};
 };

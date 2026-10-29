@@ -50,9 +50,15 @@ for that message, so `‹ v1/3 ›` always has the old ones.
             ├─ workflows.ts: fill `{{PLACEHOLDER}}`s in a ComfyUI graph
             ├─ comfy/client.ts: queue → progress over websocket → /view bytes
             ├─ images/store.ts: write data/images/<uuid>.png
-            └─ db/images.ts: insert metadata (prompt, seed, workflow, size)
+            └─ db/images.ts: insert metadata (prompt, seed, workflow, size, message_id)
    Response body: SSE frames — `progress`, then `done` with the row, or `error`
 ```
+
+`message_id` is what makes a picture belong somewhere: it is the turn it was drawn under, sent with the
+request (a reply's `[[IMG: …]]` chip passes its own message, "of this moment" and `/image` pass the newest
+reply). `placeImages()` in `shared/image.ts` turns that into the transcript layout — prompt above, image
+below, under its own message. Rows written before the column was used fall back to `created_at`, so no
+picture is ever orphaned or shown under an unrelated turn.
 
 Immutable caching is safe because the id is random per generation; `GET /api/images/[id]` supports
 Range requests so a 2 MB picture starts painting immediately.

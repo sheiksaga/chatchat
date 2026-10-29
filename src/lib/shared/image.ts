@@ -10,12 +10,39 @@
  *   SHOT    optional camera/quality tag, appended to the prompt
  *   SEED    optional integer; `-1` or absent means random
  */
+import { z } from 'zod';
+
 export interface ImageRequest {
 	prompt: string;
 	width?: number;
 	height?: number;
 	seed?: number;
 }
+
+/**
+ * One picture, as the browser sees it.
+ *
+ * The database row (`ImageRow` in `server/db/images.ts`) is a superset: it also carries `file`, `mime`
+ * and the raw ComfyUI `meta`. A component must not import `$lib/server/**`, so this is the shape the
+ * page load and the SSE `done` event are typed as — and the one `ImageRow` is checked against.
+ *
+ * `message_id` is what makes a picture belong somewhere in the transcript: it is the message it was
+ * drawn under. Rows written before that column was used have `null`, which the chat page resolves by
+ * timestamp.
+ */
+export const imageRecordSchema = z.object({
+	id: z.string(),
+	chat_id: z.string().nullable().default(null),
+	message_id: z.string().nullable().default(null),
+	width: z.number().nullable().default(null),
+	height: z.number().nullable().default(null),
+	prompt: z.string().nullable().default(null),
+	seed: z.number().nullable().default(null),
+	workflow: z.string().nullable().default(null),
+	created_at: z.number()
+});
+
+export type ImageRecord = z.infer<typeof imageRecordSchema>;
 
 /** Aspect ratios the UI offers; the marker accepts any `WxH`. */
 export const SIZE_PRESETS = [
@@ -35,13 +62,16 @@ export const SIZE_PRESETS = [
  */
 export const IMAGE_MODELS = [
 	// Ordered by what usually wins a story scene; the time is on a laptop 8 GB card, so a phone user
-	// knows what they are waiting for before they tap.
-	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~14 s)' },
+	// knows what they are waiting for before they tap. Z-Image leads: ~5 s and it keeps a scene's props.
 	{ id: 'z-image-turbo-t2i', label: 'Z-Image Turbo 6B (~5 s)' },
-	{ id: 'z-image-mystic-t2i', label: 'Z-Image + Mystic XXX NSFW (~5 s)' },
+	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~14 s)' },
+	// "Unlocked" is the shop-window word for "no content filter"; the ids keep `nsfw`/`mystic` because
+	// they are stored in every image row that was ever drawn with them.
+	{ id: 'z-image-mystic-t2i', label: 'Z-Image + Mystic XXX Unlocked (~5 s)' },
 	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~4 s)' },
-	{ id: 'flux2-klein-nsfw-t2i', label: 'FLUX.2 Klein NSFW unlock (~4 s)' },
-	{ id: 'anima-base-t2i', label: 'Anima Base obedient (~27 s)' },
+	{ id: 'flux2-klein-nsfw-t2i', label: 'FLUX.2 Klein Unlocked (~4 s)' },
+	// Anima Base is absent on purpose: CFG + ~35 steps costs 20-35 s and Z-Image beats it, but the graph
+	// stays registered so `POST /api/images` and the `[[IMG]]` marker can still reach it.
 	{ id: 'anima-turbo-t2i', label: 'Anima Turbo + detail (~5 s)' },
 	{ id: 'anima-fp16-t2i', label: 'Anima Turbo fp16 (~8 s)' },
 	{ id: 'krea2-t2i', label: 'Krea2 Turbo painterly (~43 s)' }
@@ -49,13 +79,19 @@ export const IMAGE_MODELS = [
 
 export type ImageModelId = (typeof IMAGE_MODELS)[number]['id'];
 
-// Measured best of the six for a chat scene at 832x1216: keeps wardrobe and props, ~18 s.
-export const DEFAULT_IMAGE_MODEL: ImageModelId = 'krea2-anime-t2i';
+// Measured best for a chat scene at 832x1216: keeps wardrobe and props at ~5 s, half of Krea2 Anime.
+export const DEFAULT_IMAGE_MODEL: ImageModelId = 'z-image-turbo-t2i';
 
 export const IMAGE_MODEL_IDS = IMAGE_MODELS.map((model) => model.id) as [
 	ImageModelId,
 	...ImageModelId[]
 ];
+
+/** A workflow id as a caption reads it: the picker's label without the timing, or the raw id. */
+export function imageModelLabel(workflow: string | null | undefined): string {
+	const known = IMAGE_MODELS.find((model) => model.id === workflow);
+	return known?.label.replace(/\s*\(~\d+ s\)$/, '') ?? workflow ?? 'image';
+}
 
 const MARKER = /\[\[\s*IMG\s*:([^\]]*)\]\]/gi;
 
@@ -119,4 +155,44 @@ export function parseImageCommand(text: string): ImageRequest | null {
 /** A stable seed for "regenerate": same prompt, different picture. */
 export function randomSeed(): number {
 	return Math.floor(Math.random() * 2 ** 31);
+}
+
+/**
+ * Put every picture under the message it was drawn with.
+ *
+ * `message_id` is authoritative. Rows written before pictures carried one fall back to time — the last
+ * turn that existed when the picture was drawn, which is where it was made — so an old chat still reads
+ * in order. Anything with no earlier turn at all (a picture drawn in an empty chat) goes in `loose`,
+ * which the chat renders after the transcript rather than over it.
+ *
+ * Pure and shared: the browser derives from it, the tests pin it. A picture can therefore never appear
+ * under a turn it has nothing to do with, which is what a docked strip could not promise.
+ */
+export function placeImages(
+	images: ImageRecord[],
+	messages: Array<{ id: string; createdAt: number }>
+): { byMessage: Map<string, ImageRecord[]>; loose: ImageRecord[] } {
+	const byMessage = new Map<string, ImageRecord[]>();
+	const loose: ImageRecord[] = [];
+	const known = new Set(messages.map((message) => message.id));
+
+	for (const image of [...images].sort((a, b) => a.created_at - b.created_at)) {
+		const explicit = image.message_id;
+		let target = explicit && known.has(explicit) ? explicit : null;
+		if (!target) {
+			for (const message of messages) {
+				if (message.createdAt > image.created_at) break;
+				target = message.id;
+			}
+		}
+		if (!target) {
+			loose.push(image);
+			continue;
+		}
+		const bucket = byMessage.get(target);
+		if (bucket) bucket.push(image);
+		else byMessage.set(target, [image]);
+	}
+
+	return { byMessage, loose };
 }

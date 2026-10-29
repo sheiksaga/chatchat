@@ -5,19 +5,15 @@
 import { randomUUID } from 'node:crypto';
 import { allRows, oneRow, type Db } from './index.js';
 import { now } from './chats.js';
+import type { ImageRecord } from '../../shared/image.js';
 
-export interface ImageRow {
-	id: string;
-	chat_id: string | null;
-	message_id: string | null;
+/**
+ * A stored picture. The columns the browser sees are declared once, in `shared/image.ts`; this row adds
+ * the three that are ours alone (where the bytes are, what they are, and the raw ComfyUI report).
+ */
+export interface ImageRow extends ImageRecord {
 	file: string;
 	mime: string;
-	width: number | null;
-	height: number | null;
-	prompt: string | null;
-	seed: number | null;
-	workflow: string | null;
-	created_at: number;
 	meta: string | null;
 }
 
