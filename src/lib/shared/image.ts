@@ -36,11 +36,11 @@ export const SIZE_PRESETS = [
 export const IMAGE_MODELS = [
 	// Ordered by what usually wins a story scene; the time is on a laptop 8 GB card, so a phone user
 	// knows what they are waiting for before they tap.
-	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~18 s)' },
-	{ id: 'z-image-turbo-t2i', label: 'Z-Image Turbo 6B (~9 s)' },
-	{ id: 'z-image-mystic-t2i', label: 'Z-Image + Mystic XXX NSFW (~9 s)' },
-	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~8 s)' },
-	{ id: 'flux2-klein-nsfw-t2i', label: 'FLUX.2 Klein NSFW unlock (~9 s)' },
+	{ id: 'krea2-anime-t2i', label: 'Krea2 Anime v14 (~14 s)' },
+	{ id: 'z-image-turbo-t2i', label: 'Z-Image Turbo 6B (~5 s)' },
+	{ id: 'z-image-mystic-t2i', label: 'Z-Image + Mystic XXX NSFW (~5 s)' },
+	{ id: 'flux2-klein-t2i', label: 'FLUX.2 Klein photoreal (~4 s)' },
+	{ id: 'flux2-klein-nsfw-t2i', label: 'FLUX.2 Klein NSFW unlock (~4 s)' },
 	{ id: 'anima-base-t2i', label: 'Anima Base obedient (~27 s)' },
 	{ id: 'anima-turbo-t2i', label: 'Anima Turbo + detail (~5 s)' },
 	{ id: 'anima-fp16-t2i', label: 'Anima Turbo fp16 (~8 s)' },

@@ -55,13 +55,14 @@ With ComfyUI running (default `http://127.0.0.1:8188`, **start it before llama.c
 - or press **wide / medium / close-up** above the composer for "a picture of this moment", which tags the
   scene from the character card, the chat's `look` and the last turns;
 - pick the model in the toolbar — one entry per checkpoint you have installed, with its measured time
-  (8 GB laptop card, chat idle): Krea2 Anime v14 ~14 s, Z-Image Turbo ~5 s, Z-Image + Mystic XXX ~5 s,
-  FLUX.2 Klein ~4 s, FLUX.2 Klein NSFW ~4 s, Anima Base ~27 s, Anima Turbo + detail ~4 s, Anima Turbo
-  fp16 ~8 s, Krea2 Turbo ~44 s;
+  (8 GB card, nothing else resident): Krea2 Anime v14 ~14 s, Z-Image Turbo ~5 s, Z-Image + Mystic XXX
+  ~5 s, FLUX.2 Klein ~4 s, FLUX.2 Klein NSFW ~4 s, Anima Base ~27 s, Anima Turbo + detail ~4 s, Anima
+  Turbo fp16 ~8 s, Krea2 Turbo ~44 s. With a language model resident add roughly 70 % — llama.cpp keeps
+  its weights in VRAM and has no unload endpoint, so the app cannot reclaim them (LM Studio can be
+  unloaded, and the app does that when idle);
 - press the thumbnail to open the viewer: regenerate, regenerate with the same seed, **edit region** to
   paint a mask and have ComfyUI repaint just that part, or **change with a sentence** — type
-  "black evening gown instead of the sweater" and FLUX.2 edits the picture it is looking at. Image work
-  is ~70 % faster when the language model is not holding VRAM, which is why the app unloads it when idle;
+  "black evening gown instead of the sweater" and FLUX.2 edits the picture it is looking at;
 - three of these recipes need a LoRA file beside the checkpoint (`docs/IMAGE_MODELS.md` lists them, and
   `npm run doctor` names any that are missing).
 

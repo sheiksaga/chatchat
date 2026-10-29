@@ -18,6 +18,10 @@ Two runs, same method:
 
 # Round 2 (current): four picks + Z-Image with the NSFW LoRA
 
+> **Caveat, added after round 3:** these were taken with llama.cpp resident, which costs ~70 % on every
+> image here. They are useful for comparing models against each other, not for predicting a quiet machine.
+> See the round-3 table at the bottom for the clean numbers.
+
 ## Speed
 
 Numbers are medians from a **model-major** run: each model stays resident while its block runs, which is
@@ -236,8 +240,11 @@ card. These are direct to ComfyUI with the chat idle, three seeds per config, me
 | Anima Turbo + detail | 4.0 s (8 steps)  | **4.2 s**                          | +0.2 s for better detail |
 
 **The LLM costs more than any sampler setting.** With Stheno resident, every image above runs ~70 % slower
-because the 8 GB card has to shuffle weights. The app's idle unload is therefore the single biggest speed
-feature in the product — bigger than any LoRA.
+because the 8 GB card has to shuffle weights. The app cannot fix that on llama.cpp: the backend reports
+`caps.unload: false` and `llama-server` in this build has no unload route (checked in the binary), so the
+weights stay until the process exits. What the app does do is unload LM Studio on an idle timer. Practically:
+pictures taken before you start chatting are the cheap ones, and a 5 s Z-Image becomes ~8.5 s mid-chat —
+which is still fast enough to just take the picture.
 
 ## What changed in the app
 
