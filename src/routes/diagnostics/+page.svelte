@@ -2,6 +2,7 @@
 	// A phone cannot run `npm run doctor`; this page is that command, in the browser.
 	import { resolve } from '$app/paths';
 	import { Check, X } from '@lucide/svelte';
+	import SidebarTrigger from '$lib/components/chat/SidebarTrigger.svelte';
 
 	let { data } = $props();
 
@@ -12,7 +13,10 @@
 
 <main class="mx-auto flex w-full max-w-2xl flex-col gap-6 px-6 py-8">
 	<header class="flex flex-col gap-1 border-b border-border/60 pb-5">
-		<h1 class="text-display font-semibold tracking-[-0.01em]">Diagnostics</h1>
+		<div class="flex items-center gap-2.5">
+			<SidebarTrigger />
+			<h1 class="text-display font-semibold tracking-[-0.01em]">Diagnostics</h1>
+		</div>
 		<p class="text-ui text-muted-foreground">
 			Using <span class="font-mono text-foreground">{data.activeProvider}</span>
 			{data.model ? `· ${data.model}` : '· no model selected'}

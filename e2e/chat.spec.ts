@@ -9,8 +9,8 @@
  *     token slightly before the server has committed the row, and that gap is not a bug.
  */
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
+import { composer, newChat, openSidebar } from './nav.js';
 
-const composer = (page: Page) => page.getByRole('textbox', { name: 'Write a message…' });
 const transcript = (page: Page) => page.getByTestId('transcript');
 
 /** Every chat stream ends with a 200 on /api/chat; waiting for it to finish is the sync point. */
@@ -25,12 +25,6 @@ async function waitForChatStream(page: Page, action: () => Promise<void>) {
 async function send(page: Page, text: string) {
 	await composer(page).fill(text);
 	await waitForChatStream(page, () => page.getByRole('button', { name: 'Send' }).click());
-}
-
-async function newChat(page: Page) {
-	await page.goto('/');
-	await page.getByRole('button', { name: 'New chat' }).first().click();
-	await expect(composer(page)).toBeVisible();
 }
 
 /** Create (or re-create) a card through the public API, independent of the legacy card library. */
@@ -123,6 +117,27 @@ test('the transcript and composer fit a phone screen', async ({ page }) => {
 	expect(overflow).toBeLessThanOrEqual(1);
 });
 
+test('the chat list is a drawer on a phone, not a column', async ({ page }) => {
+	test.skip(test.info().project.name !== 'mobile', 'the drawer only exists below md');
+
+	const sidebar = page.getByTestId('sidebar');
+	await page.goto('/');
+	// Closed by default, because a 240px column on a 412px screen leaves 172px for the conversation.
+	await expect(sidebar).toBeHidden();
+
+	await openSidebar(page);
+	await expect(sidebar).toBeVisible();
+
+	// Escape puts it away again (a phone has no visible close button, and the backdrop needs a tap).
+	await page.keyboard.press('Escape');
+	await expect(sidebar).toBeHidden();
+
+	// With the drawer shut, the transcript gets the width of the phone.
+	await newChat(page);
+	await expect(sidebar).toBeHidden();
+	expect(await transcript(page).evaluate((element) => element.clientWidth)).toBeGreaterThan(320);
+});
+
 test('an image command generates a picture without asking the model', async ({ page }) => {
 	// ComfyUI is not part of the e2e stack (it needs a GPU), so the point of this test is the routing:
 	// `/image …` must reach the image endpoint and *not* become a chat turn. A failing generation is a
@@ -134,8 +149,9 @@ test('an image command generates a picture without asking the model', async ({ p
 	await page.getByRole('button', { name: 'Send' }).click();
 
 	// The endpoint is unreachable in this stack, so an error must surface — and it must surface *here*,
-	// not as a chat reply, which is what proves `/image` never reaches the model.
-	await expect(page.getByText(/generating|request failed|fetch failed|ECONNREFUSED/i)).toBeVisible({
+	// not as a chat reply, which is what proves `/image` never reaches the model. The picture itself
+	// would land in the transcript under the last reply (see `placeImages`), never in a docked strip.
+	await expect(page.getByText(/drawing|request failed|fetch failed|ECONNREFUSED/i)).toBeVisible({
 		timeout: 20_000
 	});
 	await expect(transcript(page)).not.toContainText('Stub reply to:');

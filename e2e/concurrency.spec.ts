@@ -9,6 +9,7 @@
  * overwriting the first because both were read-modify-write on the same row.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { newChat } from './nav.js';
 
 const transcript = (page: Page) => page.getByTestId('transcript');
 
@@ -22,9 +23,7 @@ async function streamFinished(page: Page, action: () => Promise<void>) {
 
 test('two tabs can write to the same chat at the same time', async ({ page, context }) => {
 	// A fresh chat, created through the UI so this test does not depend on an internal API.
-	await page.goto('/');
-	await page.getByRole('button', { name: 'New chat' }).first().click();
-	await expect(page.getByRole('textbox', { name: 'Write a message…' })).toBeVisible();
+	await newChat(page);
 	const url = page.url();
 
 	// The second tab is a real second page on the same URL — same chat id, separate client state.

@@ -10,6 +10,7 @@
 	import { Check, Lock, Plus } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+	import SidebarTrigger from '$lib/components/chat/SidebarTrigger.svelte';
 	import { toasts } from '$lib/stores/toast.svelte.js';
 	import type { ProviderInfo, ProviderKind } from '$lib/shared/provider.js';
 
@@ -178,13 +179,16 @@
 
 <main class="mx-auto flex w-full max-w-3xl flex-col gap-7 px-6 py-8">
 	<header class="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-4">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-display font-semibold tracking-[-0.01em]">Settings</h1>
-			<p class="text-ui text-muted-foreground">
-				Everything here is stored on this machine, in <code class="font-mono text-[0.9em]"
-					>data/config.json</code
-				>.
-			</p>
+		<div class="flex min-w-0 items-start gap-2.5">
+			<SidebarTrigger />
+			<div class="flex flex-col gap-1">
+				<h1 class="text-display font-semibold tracking-[-0.01em]">Settings</h1>
+				<p class="text-ui text-muted-foreground">
+					Everything here is stored on this machine, in <code class="font-mono text-[0.9em]"
+						>data/config.json</code
+					>.
+				</p>
+			</div>
 		</div>
 		<a
 			class="inline-flex h-9 items-center rounded-lg border border-border px-3 text-ui transition-colors duration-150 hover:bg-accent"

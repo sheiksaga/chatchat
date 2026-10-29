@@ -111,8 +111,13 @@
 	}
 </script>
 
+<!--
+	The chat list. On a phone it is the drawer `+layout.svelte` slides in (below `md`); from `md` up it is
+	the fixed first column. Width is the layout's business, so this fills whatever it is given and scrolls
+	its own list — a long chat list must never push the footer links off a short screen.
+-->
 <aside
-	class="flex w-60 shrink-0 flex-col gap-3 border-e border-sidebar-border bg-sidebar px-3 py-4 text-sidebar-foreground lg:w-[17.5rem]"
+	class="flex h-full min-h-0 w-full flex-col gap-3 overflow-y-auto border-e border-sidebar-border bg-sidebar px-3 py-4 text-sidebar-foreground"
 >
 	<header class="flex items-center justify-between gap-2 px-1">
 		<a

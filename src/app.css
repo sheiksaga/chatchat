@@ -291,9 +291,14 @@
 @layer components {
 	/* `@tailwindcss/forms` paints its own blue focus ring on every field, from a rule that lands late
 	   in the base layer. The app has one focus language instead: a ring-coloured border (or the
-	   composer's focus-within glow) plus the keyboard outline above. Components outranks base. */
+	   composer's focus-within glow) plus the keyboard outline above. Components outranks base.
+
+	   Both halves need resetting: the plugin sets `--tw-ring-color` *and* `border-color` on `:focus`, and
+	   the border is the visible one — it was tinting the composer card blue on every page. Utilities win
+	   over this rule (a class out-specifies `:is(input)`), so `focus:border-ring` still works. */
 	:is(input, select, textarea):focus {
 		--tw-ring-color: transparent;
+		border-color: var(--ring);
 	}
 	/* -------------------------------------------------------------------------------------------
 	   Model output.

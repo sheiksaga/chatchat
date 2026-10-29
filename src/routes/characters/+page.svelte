@@ -8,6 +8,7 @@
 	import { resolve } from '$app/paths';
 	import { BookOpen, MessageSquare, Pencil, Plus, Trash2, Upload, Users } from '@lucide/svelte';
 	import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+	import SidebarTrigger from '$lib/components/chat/SidebarTrigger.svelte';
 	import { toasts } from '$lib/stores/toast.svelte.js';
 	import type { Character } from '$lib/shared/character.js';
 
@@ -90,9 +91,14 @@
 
 <main class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8">
 	<header class="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-5">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-display font-semibold tracking-[-0.01em]">Characters</h1>
-			<p class="text-ui text-muted-foreground">SillyTavern v1/v2/v3 cards, with their lorebooks.</p>
+		<div class="flex min-w-0 items-start gap-2.5">
+			<SidebarTrigger />
+			<div class="flex flex-col gap-1">
+				<h1 class="text-display font-semibold tracking-[-0.01em]">Characters</h1>
+				<p class="text-ui text-muted-foreground">
+					SillyTavern v1/v2/v3 cards, with their lorebooks.
+				</p>
+			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<label

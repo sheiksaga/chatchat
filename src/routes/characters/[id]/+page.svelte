@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { untrack } from 'svelte';
 	import { ArrowLeft, MessageSquare, Plus, Save, Trash2 } from '@lucide/svelte';
+	import SidebarTrigger from '$lib/components/chat/SidebarTrigger.svelte';
 	import { toasts } from '$lib/stores/toast.svelte.js';
 	import type { Character } from '$lib/shared/character.js';
 
@@ -118,6 +119,7 @@
 <main class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-8">
 	<header class="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-5">
 		<div class="flex min-w-0 items-center gap-3">
+			<SidebarTrigger />
 			{#if draft.avatar}
 				<img
 					class="size-14 shrink-0 rounded-xl object-cover ring-1 ring-border"
