@@ -68,6 +68,7 @@ Rules:
 | `ConfirmDialog`  | `src/lib/components/ui/confirm-dialog/ConfirmDialog.svelte`                     | `<dialog>` + `showModal()`, so Escape, focus trapping and the backdrop are the browser's job. This replaces `window.confirm()` everywhere — never reintroduce it.                                                                                 |
 | `Toaster`        | `src/lib/components/ui/toast/Toaster.svelte` + `src/lib/stores/toast.svelte.ts` | mount once in `+layout.svelte`; call `toasts.success/error/info`. One short line, bottom-right, self-dismissing.                                                                                                                                  |
 | `MessageActions` | `src/lib/components/chat/MessageActions.svelte`                                 | copy / edit / retry / delete for one turn.                                                                                                                                                                                                        |
+| `Composer`       | `src/lib/components/chat/Composer.svelte`                                       | autosizing box, Enter sends. The image-only `Draw` icon next to Send (label `Draw`, title "Draw a picture from this prompt") sends the text as a picture prompt verbatim — it does not clear the box.                                             |
 | `SidebarTrigger` | `src/lib/components/chat/SidebarTrigger.svelte`                                 | the phone's way into the sidebar drawer. Goes first in a page header; hides itself at `md`+, where the sidebar is a column again.                                                                                                                 |
 | `ScenePanel`     | `src/lib/components/chat/ScenePanel.svelte`                                     | the scene drawer (look / style / seed, plus the auto-draw toggle for storyboard chats) with a live preview of the prompt the selected image model would receive. A `<dialog>`, so Escape and the focus trap are free.                             |
 
@@ -79,7 +80,7 @@ app logic there.
 
 ## 4. Layout contract
 
-```
+````
 div.flex.h-dvh.overflow-hidden            ← the shell; sets --content-size / --content-width
 ├─ div[data-testid=sidebar]                the Sidebar: drawer below `md`, first column at `md`+
 └─ div.flex-1.overflow-y-auto             ← the ONLY page scroll container (not <html>)
@@ -87,8 +88,7 @@ div.flex.h-dvh.overflow-hidden            ← the shell; sets --content-size / -
       ├─ header                            ← SidebarTrigger, title, provider + model picker, Scene
       ├─ section/div flex-1 overflow-y-auto (chat transcript)
       │    └─ per message: body → [[IMG]] chips → ImageBlock(s) for that message
-      └─ div                                docked area: errors → ImageTools controls → Composer
-```
+      └─ div                                docked area: errors → ImageTools controls → Composer```
 
 - **The sidebar is a drawer on a phone.** One `<Sidebar>` instance, two presentations: below `md` it is
   `fixed`, off-canvas, and `invisible` while closed (so it leaves the accessibility tree and the tab
@@ -185,3 +185,4 @@ div.flex.h-dvh.overflow-hidden            ← the shell; sets --content-size / -
 
 There is no CSS framework config file to edit (Tailwind 4 is CSS-first) and no component library to
 upgrade — `ui/button` is copied source that we own.
+````

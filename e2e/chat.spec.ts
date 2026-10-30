@@ -185,3 +185,54 @@ test('the scene panel shows the prompt the next picture would use', async ({ pag
 	await page.keyboard.press('Escape');
 	await expect(panel).toBeHidden();
 });
+
+test('the composer draws the prompt as written, without asking the model', async ({ page }) => {
+	// The button next to Send is the typed word's counterpart to "of this moment": it must reach the image
+	// endpoint with the box's text verbatim, and it must *not* clear the box — the prompt is usually one
+	// tweak away from the next picture, so the text is the reader's only copy of it.
+	test.skip(test.info().project.name !== 'desktop', 'one viewport is enough for a routing check');
+
+	await newChat(page);
+	const box = composer(page);
+	const draw = page.getByRole('button', { name: 'Draw', exact: true });
+
+	// Nothing to draw, nothing to press.
+	await expect(draw).toBeDisabled();
+
+	await box.fill('a lighthouse at dusk, oil on canvas');
+	await expect(draw).toBeEnabled();
+
+	// The image stack has no ComfyUI here (it needs a GPU), so a visible failure is the proof that the
+	// request went to the picture path; a chat reply would be the bug this test exists to catch.
+	await draw.click();
+	await expect(page.getByText(/drawing|request failed|fetch failed|ECONNREFUSED/i)).toBeVisible({
+		timeout: 20_000
+	});
+	await expect(box).toHaveValue('a lighthouse at dusk, oil on canvas');
+	await expect(transcript(page)).not.toContainText('Stub reply to:');
+});
+
+test('the scene panel draws the prompt it is showing', async ({ page }) => {
+	// The panel's icon button sits beside the prompt for a reason: it draws *that* string. Sending any
+	// other text would make the one screen built for debugging prompts a liar.
+	test.skip(test.info().project.name !== 'desktop', 'one viewport is enough for a panel check');
+
+	await newChat(page);
+	await send(page, 'She waits by the window.');
+
+	await page.getByRole('button', { name: 'Scene' }).click();
+	const panel = page.getByRole('dialog', { name: 'Scene' });
+	await expect(panel).toBeVisible();
+
+	// Wait for the server's preview, then draw it. ComfyUI is absent, so the panel (or the job's error
+	// banner) must say the request failed rather than silently doing nothing.
+	const draw = panel.getByRole('button', { name: 'Draw', exact: true });
+	await expect(draw).toBeEnabled();
+	await draw.click();
+
+	// Drawing closes the drawer so the result is visible in the transcript it belongs to.
+	await expect(panel).toBeHidden();
+	await expect(page.getByText(/drawing|request failed|fetch failed|ECONNREFUSED/i)).toBeVisible({
+		timeout: 20_000
+	});
+});
