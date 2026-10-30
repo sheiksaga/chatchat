@@ -149,8 +149,10 @@ export async function POST({ request }: { request: Request }) {
 	// picker holds. This is the same split `prompts/scene.ts` makes for "of this moment".
 	const shotStyle =
 		chatId && character?.tags.includes('image-generation') ? shotStyleHint(chatId) : undefined;
-	const shotState =
-		chatId && character?.tags.includes('image-generation') ? shotStateBlock(chatId) : undefined;
+	// The scene record goes to **every** chat that has pictures, not only storyboard cards. Without it a
+	// roleplay writer has no way to know what the last picture established, and a reader line that says
+	// "unbutton your blouse" turns a dress into a blouse because nothing contradicts it.
+	const shotState = chatId ? shotStateBlock(chatId) : undefined;
 
 	const previousShot =
 		chatId && character?.tags.includes('image-generation')

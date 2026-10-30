@@ -102,7 +102,8 @@ const GARMENT_WORDS = [
 	'sweater',
 	'cardigan',
 	'hoodie',
-	'top',
+	// 'top' and 'cap' were here and had to go: they match "the top button", "on top of", "the cap of the
+	// bottle" far more often than they name clothing, and the scene prompt substitutes garments it finds.
 	'skirt',
 	'shorts',
 	'jeans',
@@ -124,7 +125,6 @@ const GARMENT_WORDS = [
 	'boots',
 	'heels',
 	'hat',
-	'cap',
 	'uniform',
 	'scarf',
 	'gloves',
@@ -193,6 +193,22 @@ const GARMENT_MATCHERS = GARMENT_WORDS.map((word) => ({ word, regex: wordRegex(w
 const CAST_MATCHERS = CAST_WORDS.map((word) => ({ word, regex: wordRegex(word) }));
 
 const unique = (values: string[]) => [...new Set(values)];
+
+/**
+ * Every established garment named in a piece of text, in the order they appear.
+ *
+ * Exported because the scene prompt has to notice when the transcript names a garment that contradicts
+ * what is actually being worn — the "unbutton your blouse" beat that turned a dress into a blouse and
+ * jeans on the next picture.
+ */
+export function garmentsIn(text: string): string[] {
+	const found: Array<{ word: string; index: number }> = [];
+	for (const matcher of GARMENT_MATCHERS) {
+		const match = matcher.regex.exec(text.toLowerCase());
+		if (match) found.push({ word: matcher.word, index: match.index });
+	}
+	return found.sort((a, b) => a.index - b.index).map((entry) => entry.word);
+}
 
 /**
  * Split a prompt into clauses.

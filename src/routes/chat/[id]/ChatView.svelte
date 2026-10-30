@@ -139,6 +139,19 @@
 			toasts.error('Could not save the scene');
 		}
 	}
+	/**
+	 * "Draw this": the composer's text becomes the picture prompt verbatim — no transcript read, no style
+	 * tags. That is the difference from "of this moment", which *asks the server* what the current beat looks
+	 * like. The scene panel sends the preview string through the same path, so a picture drawn from the
+	 * panel and one drawn from the box are the same picture.
+	 */
+	async function drawPrompt(prompt: string) {
+		// The chat's seed rides along, like "of this moment": the characters in this chat should stay the same
+		// people. Regenerate stays the way to ask for a different take.
+		await imageTools?.generate({ prompt, seed: story.seed ?? undefined });
+		sceneOpen = false;
+	}
+
 	let imageTools = $state<ReturnType<typeof ImageTools> | null>(null);
 
 	/**
@@ -861,7 +874,12 @@
 			class="mx-auto w-full px-4 pb-4"
 			style="max-width: calc(var(--content-width, 62ch) + 3rem);"
 		>
-			<Composer status={chat.status} onsend={send} onstop={() => chat.stop()} />
+			<Composer
+				status={chat.status}
+				onsend={send}
+				onstop={() => chat.stop()}
+				onimage={drawPrompt}
+			/>
 			{#if responding}
 				<p class="mt-1.5 flex items-center gap-1.5 ps-1 text-label text-muted-foreground">
 					<Square class="size-3 fill-current" aria-hidden="true" />
@@ -892,4 +910,5 @@
 	workflow={imageModel}
 	{autoDraw}
 	onchange={saveStory}
+	onimage={drawPrompt}
 />

@@ -14,6 +14,7 @@
  */
 import type { Character } from '$lib/shared/character.js';
 import { effectiveStyle, storyStyle, type StoryStyleId } from '$lib/shared/story.js';
+import { garmentsIn, type ShotState } from './state.js';
 
 export interface SceneInput {
 	/** Recent messages, oldest first. Only the tail is used — the scene is "now". */
@@ -28,6 +29,14 @@ export interface SceneInput {
 	extra?: string;
 	/** Which graph will draw this. Decides the prompt dialect, not the picture size. */
 	workflow?: string | null;
+	/**
+	 * What the pictures already established — place, wardrobe, who is in frame, what was taken off.
+	 *
+	 * The scene used to be rebuilt from the last two messages alone, so a dress that left that window
+	 * vanished from the next prompt and the room was invented from scratch. That is the storyboard path's
+	 * `SCENE STATE` block, and it belongs here for exactly the same reason.
+	 */
+	state?: ShotState | null;
 }
 
 export interface ScenePrompt {
@@ -162,7 +171,7 @@ function styleFor(input: SceneInput): StoryStyleId {
 export function buildScenePrompt(input: SceneInput): ScenePrompt {
 	const shot = input.shot ?? 'medium';
 	const target = sceneTarget(input.workflow);
-	const moment = momentTags(input.messages);
+	const moment = consistentMoment(momentTags(input.messages), input.state);
 
 	// Width/height are the picker's business, not the prompt dialect's: a scene is a scene.
 	const size = shot === 'wide' ? { width: 1216, height: 832 } : { width: 832, height: 1216 };
@@ -181,21 +190,66 @@ export function buildScenePrompt(input: SceneInput): ScenePrompt {
 	const appearance = appearanceTags(input.character);
 	if (appearance) parts.push(appearance);
 
-	// 2. Where. The chat's look, then whatever the last turns said about the surroundings.
-	if (input.look?.trim()) parts.push(input.look.trim());
+	// 2. What is worn, from the record of what the pictures actually drew. Before the moment, because a
+	// transcript that is two messages old cannot be trusted to describe the clothes.
+	const worn = wornTags(input.state);
+	if (worn) parts.push(worn);
+
+	// 3. Where. The chat's look wins (the user typed it), then the place the pictures established.
+	const place = input.look?.trim() || input.state?.place.join(', ') || '';
+	if (place) parts.push(place);
 	if (moment) parts.push(moment);
 
-	// 3. How it is framed and rendered. The user's own tags go last so they win.
+	// 4. How it is framed and rendered. The user's own tags go last so they win.
 	parts.push(SHOT_TAGS[shot]);
 	if (input.extra?.trim()) parts.push(dropNegations(input.extra));
 
-	// 4. The chat's render style, then the quality tail. Style sits with quality because both describe
+	// 5. The chat's render style, then the quality tail. Style sits with quality because both describe
 	// the medium rather than the subject, and a medium tag after the framing reads as a caption suffix.
 	const style = storyStyle(styleFor(input)).tags;
 	if (style) parts.push(style);
 	if (target === 'generic') parts.push(QUALITY_TAGS);
 
 	return { prompt: dedupe(parts.join(', ')), ...size };
+}
+
+/** The established outfit, as one tag: `wearing: dress, stockings`. */
+function wornTags(state: ShotState | null | undefined): string {
+	if (!state) return '';
+	const worn = state.wardrobe.filter((tag) => !state.removed.includes(tag)).slice(0, 6);
+	return worn.length ? `wearing: ${worn.join(', ')}` : '';
+}
+
+/**
+ * Keep the transcript from redressing a character by accident.
+ *
+ * Measured: a Jess chat established `short dress, stockings` in the opening, the reader then typed
+ * "unbutton the top button of your **blouse**", and the next picture was a blouse and jeans in an office —
+ * the word came from the reader, replaced the dress, and nothing said where she was.
+ *
+ * So a garment the transcript names but the pictures never established is **substituted**, not obeyed, and
+ * only when the same sentence is not changing clothes. "She pulls on a blouse" keeps its word; "unbutton
+ * your blouse" becomes "unbutton your dress".
+ */
+function consistentMoment(moment: string, state: ShotState | null | undefined): string {
+	if (!moment || !state) return moment;
+	const established = state.wardrobe.filter((tag) => !state.removed.includes(tag));
+	if (!established.length) return moment;
+
+	const CHANGE_RE =
+		/\b(put(?:s|ting)?\s+on|pull(?:s|ing)?\s+on|slip(?:s|ping)?\s+into|change[sd]?\s+into|dress(?:es|ed|ing)?\s+in|takes?\s+off|taking\s+off|strips?|undress\w*|swaps?)\b/i;
+	if (CHANGE_RE.test(moment)) return moment;
+
+	let text = moment;
+	for (const garment of garmentsIn(moment)) {
+		if (established.includes(garment)) continue;
+		const primary = established.find((tag) => garmentsIn(tag).length) ?? established[0];
+		if (!primary) continue;
+		// One garment per beat: `blouse` → `dress`, `jeans` → `dress`. Whole words only, so
+		// "blouses" and "dresses" are not mangled into half a word.
+		text = text.replace(new RegExp(`\\b${garment}s?\\b`, 'gi'), primary);
+	}
+	return text;
 }
 
 /**
@@ -225,6 +279,9 @@ function animaPrompt(
 
 	const appearance = appearanceTags(input.character);
 	if (appearance) parts.push(appearance);
+	// What the pictures established she is wearing, so a two-message transcript cannot redress her.
+	const worn = wornTags(input.state);
+	if (worn) parts.push(worn);
 	// Anima's recipe is tags for the subject and **one short prose sentence** for the action. Measured:
 	// 55 words of first-person roleplay prose made it draw speech bubbles full of gibberish — a comic-panel
 	// prior it only has because of the chatty text. Shortening the sentence removed them.
@@ -232,7 +289,8 @@ function animaPrompt(
 
 	const extra = input.extra?.trim() ? dropNegations(input.extra) : '';
 	if (!hasFraming(extra)) parts.push(SHOT_TAGS[shot]);
-	if (input.look?.trim()) parts.push(input.look.trim());
+	const place = input.look?.trim() || input.state?.place.join(', ') || '';
+	if (place) parts.push(place);
 
 	parts.push('detailed lighting');
 	if (extra) parts.push(extra);
@@ -262,8 +320,13 @@ function zimagePrompt(
 	const subject = `${opening} ${personNoun(input.character, moment)}`;
 	sentences.push(asSentence(appearance ? `${subject}, ${appearance}` : subject));
 
+	// Z-Image reads prose, so the record becomes a sentence: "She is wearing a short dress, stockings."
+	const worn = wornTags(input.state).replace(/^wearing: /, '');
+	if (worn) sentences.push(asSentence(`She is wearing ${worn}`));
+
 	if (moment) sentences.push(asSentence(moment));
-	if (input.look?.trim()) sentences.push(asSentence(input.look.trim()));
+	const place = input.look?.trim() || input.state?.place.join(', ') || '';
+	if (place) sentences.push(asSentence(place));
 
 	sentences.push('Soft natural lighting, detailed background.');
 	// Style before the cleanup clause: Z-Image's own order is lighting → mood → style → technical.
@@ -447,9 +510,28 @@ function momentTags(messages: SceneInput['messages']): string {
  * kept `We should...um...look at some things for James' birthday` made Anima draw a **speech bubble with
  * words in it**. Hesitation (`...`) and single-quoted fragments go for the same reason.
  */
+/**
+ * A question a camera cannot answer — but a *request* phrased as one is an instruction.
+ *
+ * "Why don't you unbutton your blouse?" describes a visible action; "What is Eldoria?" does not. The
+ * question mark alone used to drop both, which is how the beat that asked for the unbuttoning lost the
+ * unbuttoning.
+ */
+function isQuestion(sentence: string): boolean {
+	const trimmed = sentence.trim();
+	if (!trimmed.endsWith('?')) return false;
+	return !/^(?:why don'?t you|could you|can you|would you|will you|won'?t you|let'?s)\b/i.test(
+		trimmed
+	);
+}
+
 function proseOnly(content: string): string {
 	return stripMacros(
+		// Curly quotes first: roleplay text is typed on phones and in editors that substitute them, and a
+		// request written as “why don’t you…” is not a question we may drop.
 		content
+			.replace(/[‘’]/g, "'")
+			.replace(/[“”]/g, '"')
 			.replace(/[*_`#>]/g, ' ')
 			.replace(/"[^"]*"/g, ' ')
 			// A contraction is not a quotation. `/'[^']{4,}'/` ate everything between "table's" and "it's" —
@@ -457,7 +539,7 @@ function proseOnly(content: string): string {
 			// asked me too", the only wardrobe line in the scene.
 			.replace(/(?<![\w])'[^'\n]{4,}'(?![\w])/g, ' ')
 			.split(/(?<=[.!?])\s+/)
-			.filter((sentence) => !sentence.trim().endsWith('?'))
+			.filter((sentence) => !isQuestion(sentence))
 			.filter((sentence) => !sentence.includes('...'))
 			.join(' ')
 			.replace(/\s+/g, ' ')
@@ -504,7 +586,7 @@ function pickSentences(text: string, maxWords: number): string {
 		.split(/(?<=[.!?])\s+/)
 		.map((sentence) => sentence.trim())
 		.filter(Boolean)
-		.filter((sentence) => !sentence.endsWith('?'))
+		.filter((sentence) => !isQuestion(sentence))
 		.filter((sentence) => !sentence.includes('...'))
 		.filter((sentence) => !MONOLOGUE_RE.test(sentence));
 
@@ -560,7 +642,7 @@ function takeTags(text: string, maxWords: number): string {
  * — both read as a truncated sentence to a diffusion model. Stripped repeatedly, because a card can end a
  * clause with a whole little tail ("lets down only for" → "lets down only" → "lets down").
  */
-function tidyTag(tag: string, tagText = tag): string {
+function tidyTag(tag: string): string {
 	const TRAILING =
 		/\s+\b(?:for|with|to|of|and|or|in|on|at|by|from|about|than|as|the|a|an|her|his|their|only|just|even|too|also)$/i;
 	let text = tag.replace(/[\s,.;]+$/, '').trim();

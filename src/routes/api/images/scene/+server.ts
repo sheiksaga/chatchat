@@ -49,7 +49,11 @@ export async function POST({ request }) {
 		style: body.style ?? story.style,
 		shot: body.shot,
 		extra: body.extra,
-		workflow: body.workflow
+		workflow: body.workflow,
+		// The record of what the earlier pictures in this chat actually drew. Without it the scene was
+		// rebuilt from the last two messages only, which is how a dress became a blouse and the set became
+		// an office between two pictures.
+		state: story.shotState
 	});
 
 	return json({ ...scene, workflow: body.workflow });

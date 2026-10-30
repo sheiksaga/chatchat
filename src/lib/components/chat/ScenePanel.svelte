@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { Copy, Dices, TriangleAlert, X } from '@lucide/svelte';
+	import { Copy, Dices, Image as ImageIcon, TriangleAlert, X } from '@lucide/svelte';
 	import { imageModelLabel, randomSeed, type ImageModelId } from '$lib/shared/image.js';
 	import {
 		STORY_LOOK_MAX,
@@ -39,7 +39,9 @@
 		/** Resolved: the record's flag, else the card's `image-generation` tag. */
 		autoDraw,
 		/** Persist one or more fields; the page owns the request and the local record. */
-		onchange
+		onchange,
+		/** Draw the prompt currently shown. Absent until the preview has been built. */
+		onimage
 	}: {
 		open?: boolean;
 		chatId: string;
@@ -47,6 +49,7 @@
 		workflow: ImageModelId;
 		autoDraw: boolean;
 		onchange: (patch: StoryPatch) => Promise<void>;
+		onimage?: (prompt: string) => void | Promise<void>;
 	} = $props();
 
 	let dialog = $state<HTMLDialogElement | null>(null);
@@ -143,6 +146,12 @@
 		if (!preview) return;
 		await navigator.clipboard.writeText(preview.prompt);
 		toasts.success('Prompt copied');
+	}
+
+	/** Draw exactly the string under the preview — the same one Copy hands out, by construction. */
+	async function drawPreview() {
+		if (!preview || !onimage) return;
+		await onimage(preview.prompt);
 	}
 </script>
 
@@ -269,13 +278,28 @@
 			<div class="flex flex-col gap-1.5 border-t border-border/60 pt-4">
 				<div class="flex items-baseline justify-between gap-2">
 					<span class="text-label font-medium">Prompt</span>
-					<button
-						class="text-label text-muted-foreground transition-colors duration-150 hover:text-foreground disabled:opacity-40"
-						disabled={!preview}
-						onclick={() => void copyPrompt()}
-					>
-						<Copy class="me-1 inline size-3 align-[-1px]" aria-hidden="true" />Copy
-					</button>
+					<span class="flex items-center gap-1">
+						{#if onimage}
+							<!-- Beside the prompt, not beside the composer: this button draws *this* string, and the
+							     string is what the reader is looking at. -->
+							<IconButton
+								label="Draw"
+								title="Draw a picture from this prompt"
+								size="sm"
+								disabled={!preview}
+								onclick={drawPreview}
+							>
+								<ImageIcon aria-hidden="true" />
+							</IconButton>
+						{/if}
+						<button
+							class="text-label text-muted-foreground transition-colors duration-150 hover:text-foreground disabled:opacity-40"
+							disabled={!preview}
+							onclick={() => void copyPrompt()}
+						>
+							<Copy class="me-1 inline size-3 align-[-1px]" aria-hidden="true" />Copy
+						</button>
+					</span>
 				</div>
 
 				<div class="flex flex-wrap items-center gap-1.5">

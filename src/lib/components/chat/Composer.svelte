@@ -7,16 +7,23 @@
 	// The composer is *docked*, not floating: it is a sibling of the scroll area, so it can never
 	// cover the last line of a reply. The hint row under the text is the app's main "what happens if
 	// I press Enter" indicator, so it swaps to the live state while a reply is coming in.
-	import { ArrowUp, Square } from '@lucide/svelte';
+	import { ArrowUp, Image as ImageIcon, Square } from '@lucide/svelte';
+	import IconButton from '$lib/components/ui/icon-button/icon-button.svelte';
 
 	let {
 		status,
 		onsend,
-		onstop
+		onstop,
+		/**
+		 * "Make a picture of what I typed." Absent for a chat with no image model, and then the button is
+		 * not rendered at all — a control that can only fail is noise.
+		 */
+		onimage
 	}: {
 		status: string;
 		onsend: (text: string) => void | Promise<void>;
 		onstop: () => void;
+		onimage?: (prompt: string) => void | Promise<void>;
 	} = $props();
 
 	let input = $state('');
@@ -39,6 +46,16 @@
 		input = '';
 		if (textarea) textarea.style.height = 'auto';
 		await onsend(text);
+	}
+
+	/**
+	 * Draw the prompt as written, and keep the text: a picture prompt is usually a retry or a tweak away
+	 * from the next one, so clearing the box would throw away the only copy of what was asked for.
+	 */
+	async function draw() {
+		const prompt = input.trim();
+		if (!prompt || !onimage) return;
+		await onimage(prompt);
 	}
 
 	$effect(() => {
@@ -87,6 +104,19 @@
 				Stop
 			</button>
 		{:else}
+			{#if onimage}
+				<!-- Next to Send, not in a toolbar: the text in the box *is* the prompt, so "draw this"
+				     belongs beside "say this". The name stays short (`Draw`), the sentence in `title` —
+				     see the accessible-name rule in docs/UI.md §6. -->
+				<IconButton
+					label="Draw"
+					title="Draw a picture from this prompt"
+					disabled={!input.trim()}
+					onclick={draw}
+				>
+					<ImageIcon aria-hidden="true" />
+				</IconButton>
+			{/if}
 			<button
 				type="submit"
 				class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-ui font-medium text-primary-foreground transition-[background-color,transform,opacity] duration-150 ease-soft hover:bg-primary/85 active:translate-y-px disabled:pointer-events-none disabled:opacity-40"

@@ -580,3 +580,77 @@ describe('the four bugs the Jess chat exposed', () => {
 		);
 	});
 });
+
+describe('consistency between the pictures in one chat', () => {
+	// Verbatim from a Jess chat: the greeting established a short dress and stockings in the kitchen, then
+	// the reader said "blouse". The next picture was a blouse and jeans in an office.
+	const greeting = {
+		role: 'assistant',
+		content:
+			"*The table's nearly done and you walk into the kitchen. I am wearing the short dress like you asked me too. Luckily I have stockings underneath.*"
+	};
+	const askBlouse = {
+		role: 'user',
+		content: 'why don’t you unbutton the top button of your blouse too?'
+	};
+	const reply = {
+		role: 'assistant',
+		content: '*I look down at my blouse and then back at you, biting my lip nervously.*'
+	};
+	const state = {
+		place: ['kitchen'],
+		wardrobe: ['dress', 'stockings'],
+		cast: ['woman'],
+		removed: []
+	};
+
+	it('carries the established outfit into a beat that names a different one', () => {
+		const prompt = buildScenePrompt({
+			messages: [greeting, askBlouse, reply],
+			character,
+			state
+		}).prompt;
+		// The reader's word is substituted, not obeyed: the action stays, the garment does not change.
+		expect(prompt).toContain('wearing: dress, stockings');
+		expect(prompt).toContain('unbutton the top button');
+		expect(prompt).not.toContain('blouse');
+	});
+
+	it('carries the established place, so the room is not invented', () => {
+		const prompt = buildScenePrompt({ messages: [askBlouse, reply], character, state }).prompt;
+		expect(prompt).toContain('kitchen');
+	});
+
+	it('lets a real change of clothes through', () => {
+		// A change verb means the transcript is redressing her on purpose, so the new garment wins.
+		const prompt = buildScenePrompt({
+			messages: [{ role: 'user', content: 'she pulls on a blouse and opens the curtains' }],
+			character,
+			state
+		}).prompt;
+		expect(prompt).toContain('blouse');
+	});
+
+	it('never draws a garment the chat took off', () => {
+		const prompt = buildScenePrompt({
+			messages: [{ role: 'user', content: 'she waits' }],
+			character,
+			state: { ...state, removed: ['dress'] }
+		}).prompt;
+		expect(prompt).not.toContain('wearing: dress');
+		// The stockings are still on and still recorded.
+		expect(prompt).toContain('stockings');
+	});
+
+	it('says the outfit and the place in the Z-Image dialect too, as sentences', () => {
+		const prompt = buildScenePrompt({
+			messages: [askBlouse, reply],
+			character,
+			state,
+			workflow: 'z-image-turbo-t2i'
+		}).prompt;
+		expect(prompt).toContain('She is wearing dress, stockings.');
+		expect(prompt).toContain('Kitchen.');
+		expect(prompt).not.toContain('blouse');
+	});
+});
