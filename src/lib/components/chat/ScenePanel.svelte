@@ -24,7 +24,8 @@
 		STORY_STYLES,
 		type Story,
 		type StoryPatch,
-		type StoryStyleId
+		type StoryStyleId,
+		effectiveStyle
 	} from '$lib/shared/story.js';
 	import IconButton from '$lib/components/ui/icon-button/icon-button.svelte';
 	import SelectMenu from '$lib/components/ui/select-menu/SelectMenu.svelte';
@@ -58,6 +59,10 @@
 	let loading = $state(false);
 
 	const styleOptions = STORY_STYLES.map((style) => ({ value: style.id, label: style.label }));
+	// The selector shows the style the chat *draws* with, not the raw field: an anime fine-tune on `none`
+	// is pinned to anime server-side (`effectiveStyle`), and a control that disagreed with the picture was
+	// how the Jess chat ended up drawing a photograph with the picker reading "No style hint".
+	const shownStyle = $derived(effectiveStyle(story.style, workflow));
 	const shots = [
 		['wide', 'Wide'],
 		['medium', 'Medium'],
@@ -177,8 +182,15 @@
 					bind:value={lookDraft}
 					onchange={saveLook}></textarea>
 				<p class="text-label text-muted-foreground/80">
-					Location, time and light. Every scene prompt reuses it — keep wardrobe out of here, it
-					belongs to the character.
+					{#if lookDraft.trim()}
+						Location, time and light. Every scene prompt reuses it — keep wardrobe out of here, it
+						belongs to the character.
+					{:else}
+						<span class="text-amber-600 dark:text-amber-400">
+							No location — the picture will invent a room for you.
+						</span>
+						Location, time and light. Every scene prompt reuses it.
+					{/if}
 				</p>
 			</div>
 
@@ -188,12 +200,16 @@
 				<SelectMenu
 					label="Render style"
 					options={styleOptions}
-					value={story.style}
+					value={shownStyle}
 					onchange={(value) => void save({ style: value as StoryStyleId })}
 					class="self-start"
 				/>
 				<p class="text-label text-muted-foreground/80">
 					Added to the prompt as tags for tag models and as a sentence for Z-Image.
+					{#if story.style === 'none' && shownStyle !== 'none'}
+						Anime models are pinned to anime even on "No style hint" — the picker here is what they
+						follow.
+					{/if}
 				</p>
 			</div>
 

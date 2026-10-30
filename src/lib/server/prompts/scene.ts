@@ -13,7 +13,7 @@
  * Pure: no I/O, no config. The caller decides which messages to pass and where the image goes.
  */
 import type { Character } from '$lib/shared/character.js';
-import { storyStyle, type StoryStyleId } from '$lib/shared/story.js';
+import { effectiveStyle, storyStyle, type StoryStyleId } from '$lib/shared/story.js';
 
 export interface SceneInput {
 	/** Recent messages, oldest first. Only the tail is used — the scene is "now". */
@@ -54,6 +54,13 @@ const SHOT_TAGS: Record<NonNullable<SceneInput['shot']>, string> = {
 const FRAMING_RE =
 	/\b(wide(?:\s+shot)?|close[-\s]?up|full[-\s]?body|from behind|portrait|over[-\s]the[-\s]shoulder|cowboy shot|upper body|medium shot|mid[-\s]shot)\b/i;
 
+/**
+ * SDXL-era quality labels, kept for the generic dialect only.
+ *
+ * Krea2 (Qwen-VL conditioning) and FLUX.2 are not trained on them: measured on a Jess chat, the tail
+ * crowded the subject and pushed a Krea2 *Anime* checkpoint into a photoreal portrait. Z-Image never used
+ * this constant — it has its own prose cleanup clause.
+ */
 const QUALITY_TAGS = 'masterpiece, best quality, detailed lighting, cinematic composition';
 
 /** Anima-Aesthetic was trained with the quality labels stripped, so no `score_*` tags here. */
@@ -144,6 +151,14 @@ export function sceneTarget(workflow?: string | null): SceneTarget {
 	return 'generic';
 }
 
+/**
+ * The style this prompt should carry: the chat's own choice, or the default its model needs.
+ * See `effectiveStyle` — a Krea2 chat left on `none` draws photographs.
+ */
+function styleFor(input: SceneInput): StoryStyleId {
+	return effectiveStyle(input.style, input.workflow);
+}
+
 export function buildScenePrompt(input: SceneInput): ScenePrompt {
 	const shot = input.shot ?? 'medium';
 	const target = sceneTarget(input.workflow);
@@ -176,9 +191,9 @@ export function buildScenePrompt(input: SceneInput): ScenePrompt {
 
 	// 4. The chat's render style, then the quality tail. Style sits with quality because both describe
 	// the medium rather than the subject, and a medium tag after the framing reads as a caption suffix.
-	const style = storyStyle(input.style).tags;
+	const style = storyStyle(styleFor(input)).tags;
 	if (style) parts.push(style);
-	parts.push(QUALITY_TAGS);
+	if (target === 'generic') parts.push(QUALITY_TAGS);
 
 	return { prompt: dedupe(parts.join(', ')), ...size };
 }
@@ -205,7 +220,7 @@ function animaPrompt(
 
 	// The chat's render style, in Anima's own slot for it: after the count line, before the attributes
 	// (Danbooru order is series/artist/style, then physical description).
-	const style = storyStyle(input.style).tags;
+	const style = storyStyle(styleFor(input)).tags;
 	if (style) parts.push(style);
 
 	const appearance = appearanceTags(input.character);
@@ -342,20 +357,48 @@ export function safetyTag(text: string): 'safe' | 'nsfw' | 'explicit' {
  */
 function appearanceTags(character?: Character | null): string {
 	if (!character) return '';
-	// Two sources, in order of how curated they are: the card's `appearance` field is a tag list an author
-	// wrote for pictures; an `Appearance:` line in the description is the next best thing. Falling back to
-	// the first sentence of prose is the last resort, because prose buries hair and clothes behind
-	// relationships ("is {{user}}'s wife of five years") that no image model can use.
-	const parts: string[] = [];
-	if (character.appearance?.trim()) parts.push(character.appearance.trim());
-
+	// **One** source. An `Appearance:` line is written as a character sheet and often carries the hair and
+	// clothes that the `appearance` field stops short of; the field is next; the first sentence of prose is
+	// the last resort, because prose buries hair and clothes behind relationships ("is {{user}}'s wife of
+	// five years") that no image model can use.
+	//
+	// One source, not all of them: concatenating them repeated every attribute — a Jess card with both
+	// produced `slender, grey-green eyes, pale skin … slender. Dark blonde hair … pale`, and `takeWords`
+	// then cut the block mid-phrase at 34 words.
 	const section = APPEARANCE_SECTION.exec(character.description ?? '');
-	if (section?.[1]?.trim()) parts.push(section[1].trim());
-	else if (character.description?.trim()) parts.push(firstClause(character.description, 18));
+	const source =
+		section?.[1]?.trim() ||
+		character.appearance?.trim() ||
+		firstClause(character.description ?? '', 18);
+	if (!source) return '';
 
-	// `takeWords`, not `firstClause`: a card line like `5'2" tall, slender. Dark blonde hair …` ends its
-	// first sentence at the height, and cutting there is how the hair went missing from every picture.
-	return takeWords(dedupe(stripMacros(parts.join(', '))), APPEARANCE_WORDS);
+	// Cut on a **comma**, never mid-phrase: `takeWords` ended the block at "…lets down only for, pale",
+	// a dangling preposition and a dangling adjective in the same prompt.
+	const tags = takeTags(dedupe(stripMacros(source)), APPEARANCE_WORDS);
+	const age = ageTag(character);
+	return age ? dedupe([age, tags].filter(Boolean).join(', ')) : tags;
+}
+
+/**
+ * "35 year old woman" — the card's own age, as a tag.
+ *
+ * Measured on the Jess chat: the card says she is 35, the prompt never said so, and the picture came back
+ * looking like a teenager. Age is the single strongest thing an image prompt can be wrong about, so it
+ * goes in whether or not the appearance line mentions it.
+ */
+function ageTag(character: Character): string {
+	const text = [character.name, character.description, character.appearance]
+		.filter(Boolean)
+		.join(' ');
+	// "Jessica, 35 - is {{user}}'s wife" (the card header), "Age: 35", or "35-year-old".
+	const named = /,\s*(\d{2})\s*-/.exec(text)?.[1];
+	const stated = /\b(?:age[ds]?|aged)\s*:?\s*(\d{2})\b/i.exec(text)?.[1];
+	const years = /\b(\d{2})[-\s]?(?:year|yr)s?[-\s]old\b/i.exec(text)?.[1];
+	const value = Number(named ?? stated ?? years);
+	// Under 18 is not an age this app draws; a card that says so gets no age tag at all.
+	if (!Number.isFinite(value) || value < 18) return '';
+	const noun = genderCues(character) === 'male' ? 'man' : 'woman';
+	return `${value} year old ${noun}`;
 }
 
 /**
@@ -389,8 +432,8 @@ function momentTags(messages: SceneInput['messages']): string {
 	// The reader's line states what changed ("she unbuttons her cardigan", "we walk into the mall") and is
 	// often the only place the action is written; the reply describes what that looks like. Both, capped,
 	// in that order — the reader's sentence first so the picture is *of the beat*, not of the mood.
-	if (ask) parts.push(takeWords(proseOnly(ask.content), CONTEXT_USER_WORDS));
-	if (reply) parts.push(takeWords(proseOnly(reply.content), CONTEXT_ASSISTANT_WORDS));
+	if (ask) parts.push(pickSentences(proseOnly(ask.content), CONTEXT_USER_WORDS));
+	if (reply) parts.push(pickSentences(proseOnly(reply.content), CONTEXT_ASSISTANT_WORDS));
 	return parts.filter(Boolean).join(', ');
 }
 
@@ -409,7 +452,10 @@ function proseOnly(content: string): string {
 		content
 			.replace(/[*_`#>]/g, ' ')
 			.replace(/"[^"]*"/g, ' ')
-			.replace(/'[^']{4,}'/g, ' ')
+			// A contraction is not a quotation. `/'[^']{4,}'/` ate everything between "table's" and "it's" —
+			// on a real greeting that was "The table's nearly done … I am wearing the short dress like you
+			// asked me too", the only wardrobe line in the scene.
+			.replace(/(?<![\w])'[^'\n]{4,}'(?![\w])/g, ' ')
 			.split(/(?<=[.!?])\s+/)
 			.filter((sentence) => !sentence.trim().endsWith('?'))
 			.filter((sentence) => !sentence.includes('...'))
@@ -434,6 +480,96 @@ function takeWords(text: string, maxWords: number): string {
 		.join(' ')
 		.replace(/[.,;:!?]+$/, '')
 		.trim();
+}
+
+/** Speech-shaped, invisible: inner monologue a camera cannot photograph. */
+const MONOLOGUE_RE =
+	/^(i think|i hope|i wish|i would|i'd|i'm sure|i can't|i don't|i just|oh god|oh no|god,|please|thank god|my god)/i;
+
+/** Things a camera can see. Scored, not required — a plain action sentence still belongs in the prompt. */
+const VISUAL_RE =
+	/(wear\w*|dress\w*|skirt|shirt|blouse|apron|coat|cloak|jacket|stockings|lingerie|bikini|panties|nude|naked|\bbra\b|sitting|seated|standing|kneel\w*|lying|leaning|holding|walk\w*|step\w*|enters?|enter\w*|room|kitchen|bedroom|bathroom|hall|table|bed|couch|sofa|door|doorway|window|street|market|forest|shrine|hair|blush\w*|smil\w*|tears?|blood)/gi;
+
+/**
+ * The sentences worth drawing, in story order, inside a word budget.
+ *
+ * The old rule took the *first* N words, which on a real greeting spent the whole budget on
+ * "My family is coming over at ten. My parents. My father who calls me…" — an anxious mother-in-law
+ * monologue that describes nothing. Here each sentence is filtered (no questions, no hesitation, no
+ * first-person fretting), then ranked by how much of it a camera can see, and the top ones are kept while
+ * they fit. Story order is restored afterwards so the prompt still reads like the scene.
+ */
+function pickSentences(text: string, maxWords: number): string {
+	const sentences = text
+		.split(/(?<=[.!?])\s+/)
+		.map((sentence) => sentence.trim())
+		.filter(Boolean)
+		.filter((sentence) => !sentence.endsWith('?'))
+		.filter((sentence) => !sentence.includes('...'))
+		.filter((sentence) => !MONOLOGUE_RE.test(sentence));
+
+	const scored = sentences.map((sentence, index) => ({
+		sentence,
+		index,
+		words: sentence.split(/\s+/).length,
+		score: (sentence.match(VISUAL_RE) ?? []).length
+	}));
+
+	const kept: typeof scored = [];
+	let used = 0;
+	for (const entry of [...scored].sort((a, b) => b.score - a.score || a.index - b.index)) {
+		if (entry.score === 0 && kept.length) continue;
+		if (used + entry.words > maxWords) continue;
+		kept.push(entry);
+		used += entry.words;
+	}
+
+	// Nothing scored: fall back to the opening, which at least is in the character's voice.
+	const ordered = (kept.length ? kept : scored.slice(0, 1)).sort((a, b) => a.index - b.index);
+	return ordered
+		.map((entry) => entry.sentence)
+		.join(' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/**
+ * Whole tags, up to a word budget.
+ *
+ * A tag list is cut between its commas — never inside a tag. `takeWords` on a card line produced
+ * "…lets down only for, pale", which is not a phrase either model can read.
+ */
+function takeTags(text: string, maxWords: number): string {
+	const kept: string[] = [];
+	let used = 0;
+	for (const raw of text.split(/[,;]|\.\s/)) {
+		const tag = tidyTag(raw);
+		if (!tag) continue;
+		const words = tag.split(/\s+/).length;
+		if (used + words > maxWords) break;
+		kept.push(tag);
+		used += words;
+	}
+	return kept.join(', ');
+}
+
+/**
+ * A tag that ends on a preposition is not a tag.
+ *
+ * Removing `{{user}}` leaves `lets down only for` behind, and a period of the prose leaves `she is tall.`
+ * — both read as a truncated sentence to a diffusion model. Stripped repeatedly, because a card can end a
+ * clause with a whole little tail ("lets down only for" → "lets down only" → "lets down").
+ */
+function tidyTag(tag: string, tagText = tag): string {
+	const TRAILING =
+		/\s+\b(?:for|with|to|of|and|or|in|on|at|by|from|about|than|as|the|a|an|her|his|their|only|just|even|too|also)$/i;
+	let text = tag.replace(/[\s,.;]+$/, '').trim();
+	for (let guard = 0; guard < 4; guard++) {
+		const next = text.replace(TRAILING, '').trim();
+		if (next === text) break;
+		text = next;
+	}
+	return text;
 }
 
 /** Take whole words up to `maxWords`, stop at a sentence end if one comes first. */

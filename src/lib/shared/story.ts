@@ -180,6 +180,24 @@ export function parseStory(raw: unknown): Story {
 }
 
 /** One style entry, with `none` as the fallback so an unknown id can never break a prompt. */
+/**
+ * The style a chat actually draws with.
+ *
+ * An anime fine-tune with the style set to `none` renders like a photograph — measured on a Krea2 chat
+ * whose every prompt was correct and whose picture came back photoreal, because nothing in it said
+ * "anime". The picker's `none` therefore means "no extra hint for models that need none", not "strip the
+ * one hint this model needs".
+ */
+export function effectiveStyle(
+	style: StoryStyleId | string | null | undefined,
+	workflow: string | null | undefined
+): StoryStyleId {
+	if (style && style !== 'none') return style as StoryStyleId;
+	const id = (workflow ?? '').trim().toLowerCase();
+	if (id.startsWith('krea2') || id.startsWith('anima')) return 'anime';
+	return 'none';
+}
+
 export function storyStyle(id: StoryStyleId | string | null | undefined): StoryStyle {
 	return STORY_STYLES.find((style) => style.id === id) ?? STORY_STYLES[0];
 }

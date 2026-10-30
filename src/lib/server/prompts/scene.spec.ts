@@ -283,16 +283,45 @@ describe('the render style stored on the chat', () => {
 		expect(prompt.indexOf('Photorealistic')).toBeLessThan(prompt.indexOf('no watermark'));
 	});
 
-	it('puts style tags before the quality tail in the flat dialects', () => {
+	it('puts style tags before the quality tail in the generic dialect', () => {
 		const prompt = buildScenePrompt({
 			messages,
 			character,
-			workflow: 'flux2-klein-t2i',
 			style: 'illustration'
 		}).prompt;
 		const tags = prompt.split(',').map((tag) => tag.trim());
 		expect(tags).toContain('digital illustration');
 		expect(tags.indexOf('digital illustration')).toBeLessThan(tags.indexOf('masterpiece'));
+	});
+
+	it('drops the SDXL quality tail on the models that were not trained on it', () => {
+		// Measured: `masterpiece, best quality` crowded the subject and pushed a Krea2 *Anime* checkpoint
+		// into a photoreal portrait. Z-Image never used this tail either.
+		for (const workflow of ['krea2-anime-t2i', 'flux2-klein-t2i']) {
+			const prompt = buildScenePrompt({ messages, character, workflow }).prompt;
+			expect(prompt).not.toContain('masterpiece');
+			expect(prompt).not.toContain('best quality');
+		}
+	});
+
+	it('gives an anime fine-tune the anime style even when the chat says none', () => {
+		// The Jess chat: every prompt was correct and the picture came back photoreal, because the style
+		// picker was on `none` and nothing else said "anime".
+		const prompt = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'krea2-anime-nsfw-t2i',
+			style: 'none'
+		}).prompt;
+		expect(prompt).toContain('anime screenshot');
+		// A non-anime model keeps `none` exactly as before.
+		const zimage = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'z-image-turbo-t2i',
+			style: 'none'
+		}).prompt;
+		expect(zimage).not.toContain('anime screenshot');
 	});
 
 	it('ignores a style id it does not know', () => {
@@ -488,5 +517,66 @@ describe('prompt hygiene', () => {
 		}).prompt;
 		expect(prompt).not.toContain('...um');
 		expect(prompt).toContain('window');
+	});
+});
+
+describe('the four bugs the Jess chat exposed', () => {
+	// The real greeting, verbatim: the wardrobe line is the one a first-person camera monologue buries.
+	const greeting = `*My family is coming over at ten. My parents. My father who calls me 'the perfect daughter' and my mom who thinks I can do no wrong.*
+
+*The table's nearly done and you walk into the room. I am wearing the short dress like you asked me too. I think it's too short and inappropriate, but it also turns me on. Oh god, please don't let my parents think less of me, or the kids for that matter. I would just die of shame. Luckily I have stockings underneath.*`;
+
+	const jess = {
+		...character,
+		name: 'Jess',
+		appearance: '5\'2" tall, slender, grey-green eyes, pale skin',
+		description:
+			"{{char}} - Jessica, 35 - is {{user}}'s wife of five years.\nAppearance: 5'2\" tall, slender. Dark blonde hair she keeps in a practical low ponytail at work and lets down only for {{user}}, grey-green eyes, pale skin that blushes from her collarbones to her ears.\n\nTo the morning regulars she is the picture of respectability."
+	} as unknown as Character;
+
+	it('keeps a sentence that has an apostrophe in it', () => {
+		const prompt = buildScenePrompt({
+			messages: [{ role: 'assistant', content: greeting }],
+			character: jess
+		}).prompt;
+		// `/'[^']{4,}'/` ate everything between "table's" and "it's" — which was the whole wardrobe line.
+		expect(prompt).toContain('short dress');
+		expect(prompt).toContain('stockings');
+		expect(prompt).not.toContain('table s');
+	});
+
+	it('spends the word budget on what a camera can see, not on fretting', () => {
+		const prompt = buildScenePrompt({
+			messages: [{ role: 'assistant', content: greeting }],
+			character: jess
+		}).prompt;
+		expect(prompt).not.toContain('die of shame');
+		expect(prompt).not.toContain('thinks I can do no wrong');
+		expect(prompt).toContain('walk into the room');
+	});
+
+	it('reads one appearance source, so nothing is said twice', () => {
+		const prompt = buildScenePrompt({ messages: [], character: jess }).prompt;
+		const slender = prompt
+			.toLowerCase()
+			.split(', ')
+			.filter((tag) => tag.includes('slender'));
+		expect(slender).toHaveLength(1);
+		// The block must end on a whole tag: "…lets down only for" was a dangling preposition.
+		expect(prompt).not.toMatch(/only for,/);
+	});
+
+	it('puts the card’s age in the prompt, because the model guesses young without it', () => {
+		// Measured: card says 35, prompt said nothing, the picture was a teenager.
+		const prompt = buildScenePrompt({ messages: [], character: jess }).prompt;
+		expect(prompt).toContain('35 year old woman');
+	});
+
+	it('never invents an age, and never draws an under-18 one', () => {
+		expect(buildScenePrompt({ messages: [], character }).prompt).not.toContain('year old');
+		const young = { ...character, description: 'Elin, 16 - a schoolgirl.' } as unknown as Character;
+		expect(buildScenePrompt({ messages: [], character: young }).prompt).not.toContain(
+			'16 year old'
+		);
 	});
 });

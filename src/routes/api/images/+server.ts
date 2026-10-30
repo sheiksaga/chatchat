@@ -20,7 +20,7 @@ import { generateImage } from '$lib/server/images/generate.js';
 import { deriveShotState, mergeShotState } from '$lib/server/prompts/state.js';
 import { getChat, setChatStory } from '$lib/server/db/chats.js';
 import { mirrorChat } from '$lib/server/db/layout.js';
-import { parseStory, pinStyle } from '$lib/shared/story.js';
+import { effectiveStyle, parseStory, pinStyle } from '$lib/shared/story.js';
 import { DEFAULT_WORKFLOW, T2I_GRAPH_IDS, type GraphId } from '$lib/server/comfy/workflows.js';
 
 const bodySchema = z.object({
@@ -43,11 +43,17 @@ export async function GET({ url }) {
 	return json({ images: listImages(db(), chatId) });
 }
 
-/** The chat's style, or null when the chat is unknown (a scratch draw with no chat). */
+/**
+ * The chat's style, or null when the chat is unknown (a scratch draw with no chat).
+ *
+ * `effectiveStyle`, not the raw field: a Krea2 chat left on `none` must still be pinned to anime, which is
+ * the whole difference between a portrait and a photograph on that checkpoint.
+ */
 function chatStyle(chatId: string) {
 	const chat = getChat(db(), chatId);
 	if (!chat) return null;
-	return parseStory(chat.story ? JSON.parse(chat.story) : null).style;
+	const story = parseStory(chat.story ? JSON.parse(chat.story) : null);
+	return effectiveStyle(story.style, story.imageWorkflow);
 }
 
 export async function POST({ request }) {
