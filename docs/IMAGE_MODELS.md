@@ -582,6 +582,16 @@ no flip. Rules that follow:
   tags does not get them twice.
 - The Scene panel's `style` therefore means "how this chat draws", for every path: chip, "of this moment",
   edit and the scene preview.
-- Untested second-order effect: `UNLOCKED_LORA_STRENGTH: 1` (a Civitai no-strip LoRA) may pull explicit beats
-  toward a photographic look on its own. If a pinned frame still reads realistic, drop the strength to 0.5
-  before blaming the prompt — that needs a GPU run to settle.
+- The no-strip LoRA had the same effect at full strength, and it is now **0.5**. Nine frames, three prompts,
+  strengths 0 / 0.5 / 1, one fixed seed each (`E:/tmp/sheets/krea-lora-ab.jpg`): the explicit handjob frame
+  scored lineart contrast 13.2 / **14.4** / 10.2 — crispest at 0.5, softest of all nine at 1.0, where the
+  hands also went muddy. At 0 the act is replaced by a red bottle; 0.5 draws it and keeps the cel look.
+
+Two lessons that outlive Krea2:
+
+- **Explicitness is a prompt-shape problem before it is a model problem.** The same model that drew nothing
+  in round 7's cinema sequence drew a clean explicit frame here, and the difference was framing: the failing
+  prompts asked for a wide shot of twelve people with the act buried mid-list, while these lead with
+  `1girl, 1man, two shot, close-up, nude, penis, erection, handjob`.
+- **The unlock LoRA is a dial, not a switch.** Full strength buys content at the cost of the art style it
+  was bolted onto.

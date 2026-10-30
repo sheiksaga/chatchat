@@ -175,7 +175,8 @@ describe('the unlocked Krea2 recipe', () => {
 		const locked = GRAPHS['krea2-anime-t2i'].defaults;
 		const unlocked = GRAPHS['krea2-anime-nsfw-t2i'].defaults;
 		expect(GRAPHS['krea2-anime-nsfw-t2i'].file).toBe(GRAPHS['krea2-anime-t2i'].file);
-		expect(unlocked.UNLOCKED_LORA_STRENGTH).toBe(1);
+		// 0.5, measured: at 1.0 the explicit handjob frame lost the cel look (lineart contrast 10.2 vs 14.4).
+		expect(unlocked.UNLOCKED_LORA_STRENGTH).toBe(0.5);
 		expect(locked.UNLOCKED_LORA_STRENGTH).toBe(0);
 		expect(unlocked.UNLOCKED_LORA_NAME).toBe('snofs_krea_v1_nostrip.safetensors');
 		// Everything else about the recipe is unchanged: same steps, same sampler.

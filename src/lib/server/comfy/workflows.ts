@@ -238,15 +238,22 @@ export const KREA2_ANIME_DEFAULTS: GraphValues = {
 };
 
 /**
- * Krea2 Anime with the community **no-strip** LoRA at full strength.
+ * Krea2 Anime with the community **no-strip** LoRA at half strength.
  *
  * The graph always had the slot (`LoraLoaderModelOnly` → `{{UNLOCKED_LORA_NAME}}`) at strength 0, so
  * "unlocked" is one number, not a second graph file. Same 6-step recipe: measured 10.6 s at 832x1216,
  * which is the cheapest uncensored anime option on this card.
+ *
+ * 0.5, not 1.0, because 1.0 was measured to break the cel look it is supposed to leave alone: nine frames
+ * of the same three prompts at strengths 0 / 0.5 / 1 (sheet `E:/tmp/sheets/krea-lora-ab.jpg`) gave lineart
+ * contrast 13.3 / 14.6 / 13.3, and 10.2 for the explicit handjob prompt at 1.0 — the softest of the nine,
+ * with muddy double hands. At 0.5 that frame is the crispest and the act is still drawn; at 0 the model
+ * swaps the act for a red bottle. Half strength is the point where the content appears without giving up
+ * the anime look.
  */
 export const KREA2_ANIME_NSFW_DEFAULTS: GraphValues = {
 	...KREA2_ANIME_DEFAULTS,
-	UNLOCKED_LORA_STRENGTH: 1,
+	UNLOCKED_LORA_STRENGTH: 0.5,
 	FILENAME_PREFIX: 'Krea2AnimeUnlocked'
 };
 
