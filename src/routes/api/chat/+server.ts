@@ -11,13 +11,18 @@ import { randomUUID } from 'node:crypto';
 import { convertToModelMessages, streamText, type UIMessage } from 'ai';
 import { error } from '@sveltejs/kit';
 import { chatRequestSchema } from '$lib/shared/chat-request.js';
-import { STOP_SEQUENCES } from '$lib/server/config.js';
+import { MAX_REPLY_TOKENS, STOP_SEQUENCES } from '$lib/server/config.js';
 import { getConfig } from '$lib/server/config-store.js';
 import { activeModelFor, getBackend } from '$lib/server/backends/registry.js';
 import { db } from '$lib/server/db/index.js';
 import { mirrorChat } from '$lib/server/db/layout.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
+import { listImages } from '$lib/server/db/images.js';
 import { assemblePrompt } from '$lib/server/prompts/rp.js';
+import { sceneTarget } from '$lib/server/prompts/scene.js';
+import { renderShotState } from '$lib/server/prompts/state.js';
+import { storyStyle } from '$lib/shared/story.js';
+import { parseStory } from '$lib/shared/story.js';
 import {
 	appendMessage,
 	getChat,
@@ -137,6 +142,20 @@ export async function POST({ request }: { request: Request }) {
 	 * whole point of a roleplay chat, and a browser must not be able to drop them.
 	 */
 	const character = chatId ? getChatCharacter(db(), chatId) : undefined;
+	// A storyboard card has no memory of its own pictures, so hand it the last one verbatim. Only for
+	// image-utility cards: a roleplay prompt must not grow an image tag list it never asked for.
+	// Storyboard chats are told which dialect to write in: a caption-trained model (Z-Image) reads a
+	// paragraph, a Danbooru model (Krea2, Anima) reads comma tags, and the card cannot know which one the
+	// picker holds. This is the same split `prompts/scene.ts` makes for "of this moment".
+	const shotStyle =
+		chatId && character?.tags.includes('image-generation') ? shotStyleHint(chatId) : undefined;
+	const shotState =
+		chatId && character?.tags.includes('image-generation') ? shotStateBlock(chatId) : undefined;
+
+	const previousShot =
+		chatId && character?.tags.includes('image-generation')
+			? (listImages(db(), chatId).findLast((row) => row.prompt)?.prompt ?? undefined)
+			: undefined;
 	const prompt = character
 		? assemblePrompt(
 				character,
@@ -144,7 +163,7 @@ export async function POST({ request }: { request: Request }) {
 					role: row.role,
 					content: row.content
 				})),
-				{ userName: config.userName }
+				{ userName: config.userName, previousShot, shotStyle, shotState }
 			)
 		: null;
 
@@ -160,6 +179,7 @@ export async function POST({ request }: { request: Request }) {
 		allowSystemInMessages: prompt !== null,
 		messages: prompt ? prompt.messages : await convertToModelMessages(messages as UIMessage[]),
 		stopSequences: [...STOP_SEQUENCES],
+		maxOutputTokens: MAX_REPLY_TOKENS,
 		providerOptions: { [backend.provider.id]: llamaExtras },
 		onChunk: ({ chunk }) => {
 			if (chunk.type === 'text-delta') partial += chunk.text;
@@ -202,6 +222,10 @@ export async function POST({ request }: { request: Request }) {
 			});
 			// The first generation is the original text; cycling starts from it.
 			saveGeneration(db(), row.id, 0, text);
+			// Mirror *after* the row exists. This was missing here (every other write path has it), so
+			// `data/chats/<id>/chat.json` stopped one reply short until something else wrote: anything that
+			// read the folder — a backup, an import, a script — saw a transcript the database did not.
+			mirrorChat(db(), chatId!);
 		}
 	});
 
@@ -251,4 +275,56 @@ export async function POST({ request }: { request: Request }) {
 		generateMessageId: () => assistantId,
 		onError: (cause) => (cause instanceof Error ? cause.message : String(cause))
 	});
+}
+
+/**
+ * Which prompt dialect this chat draws with, in a paragraph the card can follow.
+ *
+ * The image model is chosen in the composer and remembered on the chat, so the storyboard prompt can be
+ * written for it. Measured: Z-Image is caption-trained and its storyboard beats repeated each other when
+ * fed tag soup; Krea2 and Anima are Danbooru models and read a caption as noise.
+ */
+/** The state block the writer reads, derived from the pictures already drawn. */
+function shotStateBlock(chatId: string): string | undefined {
+	const chat = getChat(db(), chatId);
+	const story = parseStory(chat?.story ? JSON.parse(chat.story) : null);
+	return renderShotState(story.shotState) || undefined;
+}
+
+function shotStyleHint(chatId: string): string {
+	const chat = getChat(db(), chatId);
+	const story = parseStory(chat?.story ? JSON.parse(chat.story) : null);
+	const target = sceneTarget(story.imageWorkflow);
+
+	const render = storyStyle(story.style);
+	// The render style is a chat-level choice, so it belongs in every prompt rather than being retyped by
+	// the writer — pinning it is also how a model with an unstable look (Krea2) is held to one style.
+	const styleLine = render.tags ? `RENDER STYLE (keep it in every prompt): ${render.tags}` : '';
+
+	if (target === 'zimage') {
+		const captionStyle = render.prose
+			? `RENDER STYLE (keep it in every prompt): ${render.prose}`
+			: '';
+		return [
+			'PROMPT STYLE (this chat draws with Z-Image, a caption model):',
+			'write ONE caption paragraph of 40-80 words in plain sentences — who is in the shot, what they are',
+			'wearing, the action, the place and the light. No Danbooru tags, no comma list of keywords, no',
+			'"masterpiece" padding. Open the paragraph with what has changed in this beat, then describe the shot.',
+			'Put that paragraph in the PROMPT segment; the rest of the marker is unchanged.',
+			captionStyle
+		]
+			.filter(Boolean)
+			.join(' ');
+	}
+
+	return [
+		'PROMPT STYLE (this chat draws with a Danbooru model):',
+		'comma-delimited tags, subject count first (1girl, 1man, 2men, crowd), then features, action, props,',
+		'environment, light. No sentences. Open the tag list with what has changed in this beat.',
+		'For nudity or sex use the plain Danbooru terms the model was trained on — nude, topless, penis,',
+		'erection, handjob, cum, sweat — because a polite euphemism or "begins to …" draws nothing at all.',
+		styleLine
+	]
+		.filter(Boolean)
+		.join(' ');
 }

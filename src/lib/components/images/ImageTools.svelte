@@ -22,6 +22,12 @@
 	let {
 		chatId,
 		images = $bindable([]),
+		/** Which graph to draw with. Owned by the page so the scene panel can preview that model's prompt. */
+		workflow = $bindable(DEFAULT_IMAGE_MODEL),
+		/** The chat's fixed seed, used by "of this moment" and never by a plain regenerate. */
+		chatSeed = null,
+		/** Called when the picker changes, so the page can remember the model on the chat. */
+		onworkflow,
 		/** The message a picture drawn now belongs under (the last reply). */
 		targetMessageId = null,
 		/** Called after a job adds a picture, so the page can keep it in view. */
@@ -29,12 +35,13 @@
 	}: {
 		chatId: string;
 		images?: ImageRecord[];
+		workflow?: ImageModelId;
+		chatSeed?: number | null;
+		onworkflow?: (workflow: ImageModelId) => void;
 		targetMessageId?: string | null;
 		onadded?: (image: ImageRecord) => void;
 	} = $props();
 
-	/** Which image model to draw with. Remembered for the session; the picker is one popover. */
-	let workflow = $state<ImageModelId>(DEFAULT_IMAGE_MODEL);
 	let viewing = $state<number | null>(null);
 	let editing = $state<ImageRecord | null>(null);
 	let busy = $state<{ value: number; max: number; what: string } | null>(null);
@@ -157,7 +164,15 @@
 			return;
 		}
 		const scene = (await response.json()) as { prompt: string; width: number; height: number };
-		await generate({ prompt: scene.prompt, width: scene.width, height: scene.height });
+		// A scene starts from the chat's seed when it has one: that is what makes the same character come
+		// back in the next picture. A plain regenerate does *not* use it (see `regenerate`), or every retry
+		// would return the same image and the button would look broken.
+		await generate({
+			prompt: scene.prompt,
+			width: scene.width,
+			height: scene.height,
+			seed: chatSeed ?? undefined
+		});
 	}
 
 	/** Regenerate: same prompt, new seed unless the caller pinned one, under the same message. */
@@ -194,6 +209,7 @@
 				label="Image model"
 				options={modelOptions}
 				bind:value={workflow}
+				onchange={(value) => onworkflow?.(value as ImageModelId)}
 				placeholder="no image model"
 				class="max-w-[17rem] border-border/70 bg-card/40"
 			/>

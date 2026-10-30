@@ -35,6 +35,22 @@ export interface PromptSettings {
 	scanDepth?: number;
 	/** Hard cap on injected lorebook entries (0 = no cap). */
 	maxLoreEntries?: number;
+	/**
+	 * The prompt of the last picture actually drawn in this chat, verbatim.
+	 *
+	 * Injected last, immediately before the reply. A storyboard card whose only memory is its own prose
+	 * re-derives the scene every turn and drifts; giving it the canonical tag list — the same string the
+	 * image model saw — turns "remember what you wrote" into "copy what is still true".
+	 */
+	previousShot?: string;
+	/** The scene record: place, what is worn, who is in frame, what was taken off. */
+	shotState?: string;
+	/**
+	 * How the prompt for the picture should be written, in the target model's own dialect. Appended with
+	 * `previousShot`, after the card's rules: a tag model and a caption model want different text, and the
+	 * card cannot know which one is selected.
+	 */
+	shotStyle?: string;
 }
 
 const DEFAULTS = {
@@ -186,9 +202,20 @@ export function assemblePrompt(
 		? substitute(card.postHistoryInstructions.trim(), userName, charName)
 		: '';
 
+	// Appended after the card's own post-history rules so it is the last thing read before the reply.
+	// Verbatim, not paraphrased: it is the grounded record of what the last picture contained.
+	const shotBlock = settings.previousShot?.trim()
+		? `PREVIOUS SHOT (the last picture drawn, verbatim):\n${settings.previousShot.trim()}\n\nKeep every tag above that is still true, change only what the latest message changes, and tag every person who is visible in the new frame.`
+		: '';
+	const styleBlock = settings.shotStyle?.trim() ? settings.shotStyle.trim() : '';
+	const stateBlock = settings.shotState?.trim() ? settings.shotState.trim() : '';
+	const postHistoryText = [postHistory, stateBlock, shotBlock, styleBlock]
+		.filter(Boolean)
+		.join('\n\n');
+
 	// Budget: system + post-history are mandatory; history gets what is left, newest first.
 	const mandatory =
-		estimateTokens(system.map((m) => m.content).join('\n')) + estimateTokens(postHistory) + 16; // headroom for the reply itself
+		estimateTokens(system.map((m) => m.content).join('\n')) + estimateTokens(postHistoryText) + 16; // headroom for the reply itself
 	const available = Math.max(contextTokens - mandatory, 0);
 
 	const kept: PromptMessage[] = [];
@@ -208,7 +235,7 @@ export function assemblePrompt(
 	}
 
 	const messages: PromptMessage[] = [...system, ...kept];
-	if (postHistory) messages.push({ role: 'system', content: postHistory });
+	if (postHistoryText) messages.push({ role: 'system', content: postHistoryText });
 
 	return {
 		messages,

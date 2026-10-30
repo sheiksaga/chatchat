@@ -241,6 +241,71 @@ describe('buildScenePrompt for Anima', () => {
 	});
 });
 
+describe('the render style stored on the chat', () => {
+	const messages = [{ role: 'user', content: 'she waits' }];
+
+	it('adds nothing when the chat has no style', () => {
+		// `none` must leave the prompt byte-identical: it is the default, so every prompt built before
+		// this field existed has to keep working.
+		const plain = buildScenePrompt({ messages, character, workflow: 'z-image-turbo-t2i' }).prompt;
+		const none = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'z-image-turbo-t2i',
+			style: 'none'
+		}).prompt;
+		expect(none).toBe(plain);
+	});
+
+	it('puts Anima style tags after the count line and before the attributes', () => {
+		const prompt = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'anima-turbo-t2i',
+			style: 'anime'
+		}).prompt;
+		const tags = prompt.split(',').map((tag) => tag.trim());
+		expect(tags).toContain('anime screenshot');
+		expect(tags.indexOf('1girl')).toBeLessThan(tags.indexOf('anime screenshot'));
+		expect(tags.indexOf('anime screenshot')).toBeLessThan(tags.indexOf('long silver hair'));
+	});
+
+	it('puts Z-Image style as a sentence before the cleanup clause', () => {
+		const prompt = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'z-image-turbo-t2i',
+			style: 'photo'
+		}).prompt;
+		expect(prompt).toContain('Photorealistic, natural color grading');
+		// The last sentence is the constraint most likely to break an image if it lands mid-paragraph.
+		expect(prompt.trimEnd().endsWith('no watermark.')).toBe(true);
+		expect(prompt.indexOf('Photorealistic')).toBeLessThan(prompt.indexOf('no watermark'));
+	});
+
+	it('puts style tags before the quality tail in the flat dialects', () => {
+		const prompt = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'flux2-klein-t2i',
+			style: 'illustration'
+		}).prompt;
+		const tags = prompt.split(',').map((tag) => tag.trim());
+		expect(tags).toContain('digital illustration');
+		expect(tags.indexOf('digital illustration')).toBeLessThan(tags.indexOf('masterpiece'));
+	});
+
+	it('ignores a style id it does not know', () => {
+		const prompt = buildScenePrompt({
+			messages,
+			character,
+			workflow: 'anima-turbo-t2i',
+			style: 'oil-painting'
+		}).prompt;
+		expect(prompt).not.toContain('oil-painting');
+	});
+});
+
 describe('subjectTag', () => {
 	it('reads a female card as one girl', () => {
 		expect(subjectTag(character, 'she waits')).toBe('1girl, solo');
@@ -325,5 +390,103 @@ describe('buildScenePrompt for Z-Image', () => {
 		const withExtra = zimage({ messages: [], extra: 'blue hour, rain' });
 		expect(withExtra).toContain('blue hour, rain.');
 		expect(withExtra).not.toContain(', .');
+	});
+});
+
+describe('what the picture is built from', () => {
+	// Measured on a real roleplay beat: the reader's line was "At the mall, Jess gets bolder" and the reply
+	// described a cardigan coming off. The prompt said only the reader's sentence and the picture had her
+	// fully dressed — the action never reached the model.
+	const reply =
+		'I glance around and swallow hard. I let my cardigan drop to the floor, leaving me in just my thin white blouse. It clings to my breasts, heavy and sensitive.';
+	const ask =
+		'At the mall, Jess gets bolder. She hangs back behind a pillar and lets the crowd walk past.';
+
+	it('keeps the action the reply describes, not just the reader line', () => {
+		const prompt = buildScenePrompt({
+			messages: [
+				{ role: 'user', content: ask },
+				{ role: 'assistant', content: reply }
+			],
+			character
+		}).prompt;
+		expect(prompt).toContain('cardigan');
+		// The reader's sentence comes first (it states the beat); the reply's description follows and must
+		// actually fit inside its own budget instead of being cut away.
+		expect(prompt.indexOf('hangs back')).toBeLessThan(prompt.indexOf('cardigan'));
+	});
+
+	it('keeps the reader own line too, because it is often where the action is written', () => {
+		const prompt = buildScenePrompt({
+			messages: [
+				{ role: 'user', content: ask },
+				{ role: 'assistant', content: reply }
+			],
+			character
+		}).prompt;
+		expect(prompt).toContain('behind a pillar');
+	});
+
+	it('drops questions and quoted dialogue from both sides', () => {
+		const prompt = buildScenePrompt({
+			messages: [
+				{ role: 'user', content: 'Should we really do this?' },
+				{
+					role: 'assistant',
+					content: '"Not here," she whispers. She pushes the door open onto the roof.'
+				}
+			],
+			character
+		}).prompt;
+		expect(prompt).not.toContain('Should we really');
+		expect(prompt).not.toContain('Not here');
+		expect(prompt).toContain('roof');
+	});
+});
+
+describe('the card decides what the character looks like', () => {
+	it('reads an `Appearance:` line instead of the first sentence of prose', () => {
+		// The real failure: a card whose `appearance` field stops at eye colour, with the hair in an
+		// `Appearance:` paragraph further down. The prompt had no hair, so every model invented a new one.
+		const jess = {
+			...character,
+			appearance: '5\'2" tall, slender, grey-green eyes, pale skin',
+			description:
+				"{{char}} is {{user}}'s wife of five years and runs a bakery.\nAppearance: dark blonde hair kept in a low ponytail, flour on her apron"
+		} as unknown as Character;
+		const prompt = buildScenePrompt({ messages: [], character: jess }).prompt;
+		expect(prompt).toContain('dark blonde hair');
+		expect(prompt).not.toContain('wife of five years');
+	});
+
+	it('still falls back to the description when there is no Appearance line', () => {
+		const prompt = buildScenePrompt({ messages: [], character }).prompt;
+		expect(prompt).toContain('moss-green cloak');
+	});
+});
+
+describe('prompt hygiene', () => {
+	it('strips SillyTavern macros, which a diffusion model would render as noise', () => {
+		const withMacro = {
+			...character,
+			appearance: 'dark blonde hair she lets down only for {{user}}'
+		} as unknown as Character;
+		const prompt = buildScenePrompt({ messages: [], character: withMacro }).prompt;
+		expect(prompt).not.toContain('{{');
+		expect(prompt).toContain('dark blonde hair');
+	});
+
+	it('drops hesitation speech, which showed up as a speech bubble in a picture', () => {
+		const prompt = buildScenePrompt({
+			messages: [
+				{
+					role: 'assistant',
+					content: 'We should...um...look at some things for James soon. She walks to the window.'
+				}
+			],
+			character
+		}).prompt;
+		expect(prompt).not.toContain('...um');
+		expect(prompt).toContain('window');
 	});
 });

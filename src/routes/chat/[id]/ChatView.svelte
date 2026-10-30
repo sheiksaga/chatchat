@@ -33,12 +33,19 @@
 	import ImageTools from '$lib/components/images/ImageTools.svelte';
 	import ImageBlock from '$lib/components/images/ImageBlock.svelte';
 	import MessageActions from '$lib/components/chat/MessageActions.svelte';
+	import ScenePanel from '$lib/components/chat/ScenePanel.svelte';
 	import {
+		DEFAULT_IMAGE_MODEL,
 		findImageMarkers,
 		parseImageCommand,
 		placeImages,
-		type ImageRecord
+		randomSeed,
+		stripImageMarkers,
+		type ImageModelId,
+		type ImageRecord,
+		type ImageRequest
 	} from '$lib/shared/image.js';
+	import type { StoryPatch } from '$lib/shared/story.js';
 	import { toasts } from '$lib/stores/toast.svelte.js';
 	import type { ChatMessage } from '$lib/shared/chat.js';
 	import type { PageData } from './$types.js';
@@ -63,20 +70,74 @@
 	// The chat's pictures. The server load seeds them; new ones are appended as their jobs finish, so a
 	// fresh picture needs no reload. Which message a picture belongs to is `message_id` — see `placed`.
 	let images = $state<ImageRecord[]>(untrack(() => data.images));
-	let look = $state(untrack(() => (data.chat.story as { look?: string } | null)?.look ?? ''));
-	let lookOpen = $state(false);
 
-	/** The look is story metadata, so it survives a reload and every scene prompt reuses it. */
-	async function saveLook(event: Event) {
-		const value = (event.currentTarget as HTMLInputElement).value;
-		look = value;
-		await fetch(`/api/chats/${data.chat.id}`, {
+	// The scene record: where the story happens, how it renders, and its seed. Typed and normalised by
+	// the load (`parseStory`), so a chat stored before the field existed still arrives well-shaped.
+	let story = $state(untrack(() => data.chat.story));
+	let sceneOpen = $state(false);
+
+	// The composer's image model lives here rather than in `ImageTools`, because the scene panel previews
+	// the prompt for whichever model is selected — one selection, two readers.
+	let imageModel = $state<ImageModelId>(DEFAULT_IMAGE_MODEL);
+
+	/**
+	 * Save part of the scene record. The local copy is authoritative for the rest of this page's life: an
+	 * `invalidateAll()` here would re-run the whole conversation load to learn what we already know, and
+	 * during a reply that is the one thing that must not happen (see `syncFromServer`).
+	 */
+	/**
+	 * Draw markers automatically in a storyboard chat.
+	 *
+	 * The record may say so explicitly; otherwise it inherits from the card's `image-generation` tag,
+	 * which is what the shipped Storyboard card carries. A roleplay card therefore never spends GPU the
+	 * reader did not ask for, and the storyboard chat is usable without explaining the rule.
+	 */
+	const autoDraw = $derived(
+		story.autoImages ?? Boolean(data.character?.tags?.includes('image-generation'))
+	);
+
+	/** The seed of the newest picture in this chat, for a `LOCK` marker when no chat seed is set. */
+	function latestSeed(): number | null {
+		const withSeed = [...images]
+			.sort((a, b) => a.created_at - b.created_at)
+			.findLast((image) => typeof image.seed === 'number');
+		return withSeed?.seed ?? null;
+	}
+
+	/**
+	 * One marker → one picture, with the seed policy resolved here.
+	 *
+	 * `LOCK` means "the same subject": reuse the chat's fixed seed, or the seed the last picture actually
+	 * used. When neither exists this is the first picture of the subject, so draw it with a fresh seed and
+	 * remember that seed on the chat — otherwise every later beat would start over and the face would
+	 * drift, which is the failure the whole LOCK token exists to prevent.
+	 */
+	async function drawMarker(marker: ImageRequest, messageId: string) {
+		let seed = marker.seed;
+		if (seed === undefined && marker.lock) {
+			seed = story.seed ?? latestSeed() ?? undefined;
+			if (seed === undefined) {
+				seed = randomSeed();
+				await saveStory({ seed });
+			}
+		}
+		await imageTools?.generate({ ...marker, seed, lock: undefined }, messageId);
+	}
+
+	async function saveStory(patch: StoryPatch) {
+		const previous = story;
+		story = { ...story, ...patch };
+		const response = await fetch(`/api/chats/${data.chat.id}`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ story: { look: value } })
+			body: JSON.stringify({ story: patch })
 		});
-		await invalidateAll();
-		toasts.success('Look saved');
+		// A failed save must not leave the panel and the prompt preview describing a record the server does
+		// not have: the next picture would be built from the old one and the screen would blame the model.
+		if (!response.ok) {
+			story = previous;
+			toasts.error('Could not save the scene');
+		}
 	}
 	let imageTools = $state<ReturnType<typeof ImageTools> | null>(null);
 
@@ -152,8 +213,13 @@
 					}
 				})
 			}),
-			onFinish: () => {
+			onFinish: ({ message, isAbort, isError }) => {
 				void invalidateAll();
+				if (isAbort || isError || !autoDraw) return;
+				// The card's contract is "one marker per reply, drawn on arrival". Sequential on purpose:
+				// ImageTools runs one job at a time, so a second marker would be dropped rather than queued.
+				const markers = findImageMarkers(textOf(message));
+				for (const marker of markers) void drawMarker(marker, message.id);
 			}
 		});
 	}
@@ -185,6 +251,15 @@
 	const targetMessageId = $derived(
 		serverMessages.findLast((message) => message.role === 'assistant')?.id ?? null
 	);
+
+	/**
+	 * The text a reader sees: markers are machinery, so they are stripped from the body and shown as the
+	 * chip under it. Without this the transcript renders the raw tag list — which is what "the storyboard
+	 * just spits out Danbooru tags" looked like on screen.
+	 */
+	function bodyText(message: UIMessage): string {
+		return stripImageMarkers(shownContent(message));
+	}
 
 	/** A finished job lands in the transcript, so follow it down unless the reader scrolled away. */
 	async function onImageAdded() {
@@ -498,39 +573,15 @@
 				</span>
 			{/if}
 
-			<div class="relative">
-				<button
-					class="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-label text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
-					aria-expanded={lookOpen}
-					title="Where this story happens"
-					onclick={() => (lookOpen = !lookOpen)}
-				>
-					<Sparkles class="size-4" aria-hidden="true" />
-					Look
-				</button>
-				{#if lookOpen}
-					<button
-						class="fixed inset-0 z-20 cursor-default"
-						tabindex="-1"
-						aria-hidden="true"
-						onclick={() => (lookOpen = false)}
-					></button>
-					<div
-						class="absolute end-0 top-full z-30 mt-1.5 flex w-80 animate-pop-in flex-col gap-2 rounded-xl border border-border bg-popover p-3 shadow-xl shadow-black/50"
-					>
-						<p class="text-label text-muted-foreground">
-							Where this story happens. Every scene prompt reuses it.
-						</p>
-						<input
-							class="rounded-md border border-input bg-background px-2 py-1.5 text-ui placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none"
-							aria-label="Story look"
-							placeholder="moonlit forest shrine, floating dust"
-							value={look}
-							onchange={saveLook}
-						/>
-					</div>
-				{/if}
-			</div>
+			<button
+				class="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-label text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground"
+				aria-expanded={sceneOpen}
+				title="What the next picture is built from"
+				onclick={() => (sceneOpen = true)}
+			>
+				<Sparkles class="size-4" aria-hidden="true" />
+				Scene
+			</button>
 		</div>
 	</header>
 
@@ -697,10 +748,10 @@
 						<div
 							class="rounded-xl rounded-ss-sm bg-muted/55 px-4 py-2.5 ring-1 ring-border/40 ring-inset"
 						>
-							<MessageBody content={shownContent(message)} role={message.role} />
+							<MessageBody content={bodyText(message)} role={message.role} />
 						</div>
 					{:else}
-						<MessageBody content={shownContent(message)} role={message.role} {isStreaming} />
+						<MessageBody content={bodyText(message)} role={message.role} {isStreaming} />
 					{/if}
 
 					{#if markers.length}
@@ -709,7 +760,7 @@
 								<button
 									class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-2.5 py-1 text-label text-muted-foreground transition-[color,background-color,border-color,transform] duration-150 ease-soft hover:-translate-y-px hover:border-foreground/25 hover:text-foreground"
 									title="Generate this picture"
-									onclick={() => imageTools?.generate(marker, message.id)}
+									onclick={() => void drawMarker(marker, message.id)}
 								>
 									<ImageIcon class="size-3.5 shrink-0" aria-hidden="true" />
 									<span class="truncate">{marker.prompt}</span>
@@ -798,6 +849,9 @@
 				bind:this={imageTools}
 				chatId={data.chat.id}
 				bind:images
+				bind:workflow={imageModel}
+				chatSeed={story.seed}
+				onworkflow={(value) => void saveStory({ imageWorkflow: value })}
 				{targetMessageId}
 				onadded={onImageAdded}
 			/>
@@ -829,4 +883,13 @@
 	description="The turn and everything after it stay readable, but this message is gone for good."
 	confirmLabel="Delete message"
 	onconfirm={removeConfirmed}
+/>
+
+<ScenePanel
+	bind:open={sceneOpen}
+	chatId={data.chat.id}
+	{story}
+	workflow={imageModel}
+	{autoDraw}
+	onchange={saveStory}
 />

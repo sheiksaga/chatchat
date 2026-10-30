@@ -5,6 +5,7 @@
  * so `npm run check` finds every caller when a field changes.
  */
 import { z } from 'zod';
+import { storySchema } from './story.js';
 
 export const roleSchema = z.enum(['system', 'user', 'assistant']);
 
@@ -42,8 +43,8 @@ export const chatSummarySchema = z.object({
 
 export const chatDetailSchema = chatSummarySchema.extend({
 	messages: z.array(messageSchema),
-	/** Parsed scene record, opaque to most of the UI (Phase 4 gives it a real schema). */
-	story: z.unknown().nullable()
+	/** The scene record: where the story happens, how it is rendered, and its seed. Always present. */
+	story: storySchema
 });
 
 export type Role = z.infer<typeof roleSchema>;

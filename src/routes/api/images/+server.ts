@@ -17,6 +17,10 @@ import { z } from 'zod';
 import { db } from '$lib/server/db/index.js';
 import { listImages } from '$lib/server/db/images.js';
 import { generateImage } from '$lib/server/images/generate.js';
+import { deriveShotState, mergeShotState } from '$lib/server/prompts/state.js';
+import { getChat, setChatStory } from '$lib/server/db/chats.js';
+import { mirrorChat } from '$lib/server/db/layout.js';
+import { parseStory, pinStyle } from '$lib/shared/story.js';
 import { DEFAULT_WORKFLOW, T2I_GRAPH_IDS, type GraphId } from '$lib/server/comfy/workflows.js';
 
 const bodySchema = z.object({
@@ -39,6 +43,13 @@ export async function GET({ url }) {
 	return json({ images: listImages(db(), chatId) });
 }
 
+/** The chat's style, or null when the chat is unknown (a scratch draw with no chat). */
+function chatStyle(chatId: string) {
+	const chat = getChat(db(), chatId);
+	if (!chat) return null;
+	return parseStory(chat.story ? JSON.parse(chat.story) : null).style;
+}
+
 export async function POST({ request }) {
 	const parsed = bodySchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) {
@@ -52,11 +63,31 @@ export async function POST({ request }) {
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 
 			try {
+				// The chat's render style is pinned here, not left to the writer: a storyboard model that drops
+				// the style tags for one beat flips the whole sequence from anime to painted realism.
+				const style = parsed.data.chatId ? chatStyle(parsed.data.chatId) : null;
+				const prompt = pinStyle(parsed.data.prompt, style);
+
 				const result = await generateImage({
 					...parsed.data,
+					prompt,
 					onProgress: (progress) =>
 						send({ type: 'progress', value: progress.value, max: progress.max })
 				});
+				// The picture that was actually drawn is the only trustworthy record of the scene, so the
+				// state is derived from the prompt that produced it and merged into the chat.
+				if (parsed.data.chatId) {
+					const database = db();
+					const chat = getChat(database, parsed.data.chatId);
+					if (chat) {
+						const story = parseStory(chat.story ? JSON.parse(chat.story) : null);
+						setChatStory(database, chat.id, {
+							...story,
+							shotState: mergeShotState(story.shotState, deriveShotState(prompt))
+						});
+						mirrorChat(database, chat.id);
+					}
+				}
 				send({ type: 'done', image: result.image, url: result.url, elapsedMs: result.elapsedMs });
 			} catch (cause) {
 				send({ type: 'error', message: cause instanceof Error ? cause.message : String(cause) });

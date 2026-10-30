@@ -8,7 +8,7 @@
  *  3. the chat being titled from its first message,
  *  4. a stale `chatId` being a 404 rather than a 500.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,6 +24,7 @@ import { closeDb, db, openDb, setDbForTests } from '$lib/server/db/index.js';
 import { createChat, getChat, listMessages } from '$lib/server/db/chats.js';
 import { getChatCharacter, setChatCharacter, upsertCharacter } from '$lib/server/db/characters.js';
 import { normalizeCardJson } from '$lib/server/cards/parse.js';
+import { DATA_DIR } from '$lib/server/config.js';
 import { POST } from './+server.js';
 
 let stub: FakeLlm;
@@ -122,6 +123,35 @@ describe('POST /api/chat', () => {
 		expect(getChat(db(), chat.id)?.title).toBe('Hello there');
 	});
 
+	it('mirrors the finished reply into the chat folder, not one write behind', async () => {
+		//  is what a backup, an import or a script reads. The normal path
+		// appended the assistant row and never mirrored it (every other write path does), so the folder
+		// stopped one reply short — and anything that placed pictures by reading the mirror put them
+		// under the wrong turn.
+		const chat = createChat(db(), { title: 'Mirror' });
+
+		const response = await chatRequest({
+			chatId: chat.id,
+			model: MODEL,
+			// A fresh id per test: user-message ids are deduplicated across every chat, so reusing one
+			// means the user turn is skipped and only the reply is written.
+			messages: [
+				{
+					id: `mirror-${Date.now()}`,
+					role: 'user',
+					parts: [{ type: 'text', text: 'Say something' }]
+				}
+			]
+		});
+		await response.text();
+
+		const mirror = JSON.parse(
+			readFileSync(path.join(DATA_DIR, 'chats', chat.id, 'chat.json'), 'utf8')
+		) as { messages?: Array<{ role: string }>; messageCount?: number };
+		expect(mirror.messages?.map((message) => message.role)).toEqual(['user', 'assistant']);
+		expect(mirror.messageCount).toBe(2);
+	});
+
 	it('records generation stats on the assistant message', async () => {
 		const chat = createChat(db(), { title: 'Stats' });
 		await (
@@ -159,6 +189,8 @@ describe('POST /api/chat', () => {
 		expect(body.temperature).toBe(0.5);
 		// llama.cpp capability flags add the thinking switch
 		expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+		// A reply is capped: a looping model must not be able to write a 118 KB turn and eat the context.
+		expect(body.max_tokens).toBe(1200);
 	});
 
 	it('does not duplicate a user turn when the same message is sent twice', async () => {
@@ -216,9 +248,16 @@ describe('POST /api/chat', () => {
 				if (decoder.decode(value, { stream: true }).includes('text-delta')) sawText = true;
 			}
 			controller.abort();
-			await new Promise((resolve) => setTimeout(resolve, 500));
 
-			const assistant = listMessages(db(), chat.id).find((m) => m.role === 'assistant');
+			// Poll instead of sleeping: the abort is handled on the server's event loop, and a fixed 500 ms
+			// was enough alone but not on a machine also running a build — a flaky test that looked like a
+			// real regression twice.
+			let assistant = listMessages(db(), chat.id).find((m) => m.role === 'assistant');
+			for (let wait = 0; !assistant && wait < 40; wait++) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				assistant = listMessages(db(), chat.id).find((m) => m.role === 'assistant');
+			}
+
 			expect(assistant).toBeDefined();
 			expect(assistant!.content.length).toBeGreaterThan(0);
 			expect(JSON.parse(assistant!.meta!)).toMatchObject({ aborted: true });

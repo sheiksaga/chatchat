@@ -11,17 +11,17 @@ import { getChat, listMessages, setChatStory } from '$lib/server/db/chats.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
 import { buildScenePrompt } from '$lib/server/prompts/scene.js';
 import { mirrorChat } from '$lib/server/db/layout.js';
-
-interface StoryLook {
-	look?: string;
-}
+import { parseStory } from '$lib/shared/story.js';
 
 export async function POST({ request }) {
 	const body = (await request.json().catch(() => null)) as {
 		chatId?: string;
 		shot?: 'wide' | 'medium' | 'close';
 		extra?: string;
+		/** An override for the record's look — the panel sends what it shows, without saving it. */
 		look?: string;
+		/** An override for the record's style, same rule. */
+		style?: string;
 		workflow?: string;
 	} | null;
 	if (!body?.chatId) return json({ error: 'chatId is required' }, { status: 400 });
@@ -30,8 +30,10 @@ export async function POST({ request }) {
 	const chat = getChat(database, body.chatId);
 	if (!chat) return json({ error: 'Chat not found' }, { status: 404 });
 
-	// The look is remembered per chat, so the second picture matches the first without retyping.
-	const story = (chat.story ? JSON.parse(chat.story) : {}) as StoryLook;
+	// The look, the render style and the seed are remembered per chat, so the second picture matches the
+	// first without retyping. `parseStory` also copes with the `{ look }`-only records written before the
+	// style and seed existed.
+	const story = parseStory(chat.story ? JSON.parse(chat.story) : null);
 	if (body.look !== undefined && body.look !== story.look) {
 		setChatStory(database, chat.id, { ...story, look: body.look });
 		mirrorChat(database, chat.id);
@@ -44,6 +46,7 @@ export async function POST({ request }) {
 		})),
 		character: getChatCharacter(database, chat.id) ?? null,
 		look: body.look ?? story.look ?? null,
+		style: body.style ?? story.style,
 		shot: body.shot,
 		extra: body.extra,
 		workflow: body.workflow

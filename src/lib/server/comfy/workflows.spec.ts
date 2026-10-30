@@ -54,6 +54,7 @@ describe('registered graphs', () => {
 			'flux2-klein-nsfw-t2i',
 			'anima-fp16-t2i',
 			'krea2-anime-t2i',
+			'krea2-anime-nsfw-t2i',
 			'z-image-turbo-t2i',
 			'z-image-mystic-t2i'
 		]);
@@ -165,5 +166,20 @@ describe('registered graphs', () => {
 			expect(classes).toContain('ReferenceLatent');
 			expect(classes).toContain('VAEEncode');
 		});
+	});
+});
+
+describe('the unlocked Krea2 recipe', () => {
+	it('is the same graph at LoRA strength 1, not a second file', () => {
+		// The template always carried the unlocked-LoRA slot at strength 0; "unlocked" is one number.
+		const locked = GRAPHS['krea2-anime-t2i'].defaults;
+		const unlocked = GRAPHS['krea2-anime-nsfw-t2i'].defaults;
+		expect(GRAPHS['krea2-anime-nsfw-t2i'].file).toBe(GRAPHS['krea2-anime-t2i'].file);
+		expect(unlocked.UNLOCKED_LORA_STRENGTH).toBe(1);
+		expect(locked.UNLOCKED_LORA_STRENGTH).toBe(0);
+		expect(unlocked.UNLOCKED_LORA_NAME).toBe('snofs_krea_v1_nostrip.safetensors');
+		// Everything else about the recipe is unchanged: same steps, same sampler.
+		expect(unlocked.STEPS).toBe(locked.STEPS);
+		expect(unlocked.SAMPLER).toBe(locked.SAMPLER);
 	});
 });

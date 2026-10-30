@@ -213,3 +213,48 @@ describe('greetingFor', () => {
 		expect(greetingFor(withGreetings, 'Sam', 9)).toBe('Welcome, Sam.');
 	});
 });
+
+describe('the previous shot block', () => {
+	// A storyboard card has no memory of its own pictures. Handing it the last prompt verbatim is what
+	// stops it re-deriving (and drifting) the scene every turn.
+	const card = {
+		id: 'card_storyboard',
+		name: 'Storyboard',
+		spec: 'chara_card_v2',
+		description: 'engine',
+		personality: '',
+		scenario: '',
+		firstMessage: '',
+		exampleMessages: '',
+		systemPrompt: '',
+		postHistoryInstructions: 'One marker only.',
+		alternateGreetings: [],
+		tags: ['utility', 'image-generation'],
+		creator: '',
+		characterVersion: '',
+		creatorNotes: '',
+		appearance: '',
+		avatar: null,
+		book: null
+	} as unknown as Parameters<typeof assemblePrompt>[0];
+
+	it('is appended last, verbatim, so it is the freshest thing the model reads', () => {
+		const built = assemblePrompt(card, [], {
+			userName: 'You',
+			previousShot: '1man, blue business suit, bus interior'
+		});
+		const last = built.messages[built.messages.length - 1];
+		expect(last.role).toBe('system');
+		expect(last.content).toContain('PREVIOUS SHOT');
+		expect(last.content).toContain('1man, blue business suit, bus interior');
+		// After the card's own rules, not before them.
+		expect(last.content.indexOf('One marker only.')).toBeLessThan(
+			last.content.indexOf('PREVIOUS SHOT')
+		);
+	});
+
+	it('is absent when there is no previous picture', () => {
+		const built = assemblePrompt(card, [], { userName: 'You' });
+		expect(JSON.stringify(built.messages)).not.toContain('PREVIOUS SHOT');
+	});
+});

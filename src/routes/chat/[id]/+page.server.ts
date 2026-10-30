@@ -6,6 +6,7 @@ import { backendFor } from '$lib/server/backends/registry.js';
 import { getChatCharacter } from '$lib/server/db/characters.js';
 import { listImages } from '$lib/server/db/images.js';
 import { messageStatsSchema, type ChatDetail, type ChatSummary } from '$lib/shared/chat.js';
+import { parseStory } from '$lib/shared/story.js';
 import type { ImageRecord } from '$lib/shared/image.js';
 import type { PageServerLoad } from './$types.js';
 
@@ -19,7 +20,9 @@ export const load: PageServerLoad = ({ params }) => {
 		title: chat.title,
 		updatedAt: chat.updated_at,
 		messageCount: 0,
-		story: chat.story ? (JSON.parse(chat.story) as unknown) : null,
+		// Normalised here, not in the component: every chat has a well-shaped record even when the stored
+		// JSON predates the field, so the panel and the prompt builder can never see a half-built story.
+		story: parseStory(chat.story ? (JSON.parse(chat.story) as unknown) : null),
 		messages: listMessages(database, chat.id).map((message) => ({
 			id: message.id,
 			role: message.role,

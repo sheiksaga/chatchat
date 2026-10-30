@@ -59,3 +59,13 @@ export const IMAGES_DIR = path.join(DATA_DIR, 'images');
 
 /** Character card avatars (one file per card, named after the card id). */
 export const CARDS_DIR = path.join(DATA_DIR, 'cards');
+
+/**
+ * Hard ceiling on one reply.
+ *
+ * Not a style preference: a small model can fall into a repetition loop ("1man, adult, short brown hair, ...
+ * 1man, adult, short brown hair, ...") and a loop with no ceiling writes 118 KB / 29 500 tokens, fills the
+ * whole context and leaves the chat unable to answer anything afterwards. 1200 tokens is ~4 800 characters —
+ * far longer than any reply this app wants, short enough that a loop costs seconds instead of five minutes.
+ */
+export const MAX_REPLY_TOKENS = Number(process.env.CHATCHAT_MAX_REPLY_TOKENS ?? 1200);

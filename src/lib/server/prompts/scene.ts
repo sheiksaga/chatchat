@@ -13,13 +13,16 @@
  * Pure: no I/O, no config. The caller decides which messages to pass and where the image goes.
  */
 import type { Character } from '$lib/shared/character.js';
+import { storyStyle, type StoryStyleId } from '$lib/shared/story.js';
 
 export interface SceneInput {
 	/** Recent messages, oldest first. Only the tail is used — the scene is "now". */
 	messages: Array<{ role: string; content: string }>;
 	character?: Character | null;
-	/** Free-text location/style stored with the chat (the legacy "story look"). */
+	/** Free-text location stored with the chat (the legacy "story look"). */
 	look?: string | null;
+	/** How this chat should be rendered (photograph / anime / illustration), from the story record. */
+	style?: StoryStyleId | string | null;
 	shot?: 'wide' | 'medium' | 'close';
 	/** Extra tags the user typed, appended last so they win. */
 	extra?: string;
@@ -56,9 +59,25 @@ const QUALITY_TAGS = 'masterpiece, best quality, detailed lighting, cinematic co
 /** Anima-Aesthetic was trained with the quality labels stripped, so no `score_*` tags here. */
 const ANIMA_QUALITY = 'masterpiece, best quality, highres';
 
-/** How much of the conversation describes the scene. Two turns is enough for "what is happening now". */
-const CONTEXT_MESSAGES = 2;
-const CONTEXT_WORDS = 45;
+/**
+ * How much of the conversation describes the scene.
+ *
+ * The **assistant's** reply is the scene: it says what the character just did, what she is wearing now,
+ * where she is. The reader's line is the instruction that produced it. Budgeting them together in
+ * arrival order is what made a picture of "we walk into the mall" while the reply was busy describing
+ * the mall — measured on a roleplay beat where a cardigan came off and the prompt said nothing.
+ */
+const CONTEXT_ASSISTANT_WORDS = 32;
+const CONTEXT_USER_WORDS = 24;
+
+/** The card's own visual line, plus whatever its `Appearance:` paragraph adds. */
+const APPEARANCE_WORDS = 34;
+
+/** Anima reads one short action sentence; more turns into comic-panel text (see `animaPrompt`). */
+const ANIMA_MOMENT_WORDS = 20;
+
+/** `Description: … Appearance: 5'2", dark blonde hair, apron …` — common enough to be worth reading. */
+const APPEARANCE_SECTION = /(?:^|\n)\s*appearance\s*:\s*([^\n]{0,300})/i;
 
 const FEMALE_CUES = [
 	'girl',
@@ -107,7 +126,7 @@ const EXPLICIT_RE =
 	/\b(sex|nudes?|naked|topless|bottomless|penetration|penis|cock|vagina|pussy|cum|orgasm|nipples?|areola|undress\w*|masturbat\w*|blowjob|creampie|foreskin|thighs spread)\b/i;
 
 const NSFW_RE =
-	/\b(kiss\w*|lingerie|bra|panties|underwear|bed|intimate|embrace|caress|thong|bikini|groping|lap)\b/i;
+	/\b(kiss\w*|lingerie|bra|panties|underwear|bed|intimate|embrace|caress|thong|bikini|groping|lap|unbutton\w*|undress\w*|strip\w*|bare\w*)\b/i;
 
 /**
  * Which prompt dialect to emit, decided from the graph id the picker sent.
@@ -154,6 +173,11 @@ export function buildScenePrompt(input: SceneInput): ScenePrompt {
 	// 3. How it is framed and rendered. The user's own tags go last so they win.
 	parts.push(SHOT_TAGS[shot]);
 	if (input.extra?.trim()) parts.push(dropNegations(input.extra));
+
+	// 4. The chat's render style, then the quality tail. Style sits with quality because both describe
+	// the medium rather than the subject, and a medium tag after the framing reads as a caption suffix.
+	const style = storyStyle(input.style).tags;
+	if (style) parts.push(style);
 	parts.push(QUALITY_TAGS);
 
 	return { prompt: dedupe(parts.join(', ')), ...size };
@@ -179,9 +203,17 @@ function animaPrompt(
 	const subject = subjectTag(input.character, moment);
 	if (subject) parts.push(subject);
 
+	// The chat's render style, in Anima's own slot for it: after the count line, before the attributes
+	// (Danbooru order is series/artist/style, then physical description).
+	const style = storyStyle(input.style).tags;
+	if (style) parts.push(style);
+
 	const appearance = appearanceTags(input.character);
 	if (appearance) parts.push(appearance);
-	if (moment) parts.push(moment);
+	// Anima's recipe is tags for the subject and **one short prose sentence** for the action. Measured:
+	// 55 words of first-person roleplay prose made it draw speech bubbles full of gibberish — a comic-panel
+	// prior it only has because of the chatty text. Shortening the sentence removed them.
+	if (moment) parts.push(takeWords(moment, ANIMA_MOMENT_WORDS));
 
 	const extra = input.extra?.trim() ? dropNegations(input.extra) : '';
 	if (!hasFraming(extra)) parts.push(SHOT_TAGS[shot]);
@@ -219,6 +251,9 @@ function zimagePrompt(
 	if (input.look?.trim()) sentences.push(asSentence(input.look.trim()));
 
 	sentences.push('Soft natural lighting, detailed background.');
+	// Style before the cleanup clause: Z-Image's own order is lighting → mood → style → technical.
+	const style = storyStyle(input.style).prose;
+	if (style) sentences.push(asSentence(style));
 	sentences.push('Sharp focus, clean detailed image, no text, no watermark.');
 
 	const body = sentences.join(' ').replace(/\s+/g, ' ').trim();
@@ -307,8 +342,34 @@ export function safetyTag(text: string): 'safe' | 'nsfw' | 'explicit' {
  */
 function appearanceTags(character?: Character | null): string {
 	if (!character) return '';
-	const source = [character.appearance, character.description].filter(Boolean).join('. ');
-	return firstClause(source, 18);
+	// Two sources, in order of how curated they are: the card's `appearance` field is a tag list an author
+	// wrote for pictures; an `Appearance:` line in the description is the next best thing. Falling back to
+	// the first sentence of prose is the last resort, because prose buries hair and clothes behind
+	// relationships ("is {{user}}'s wife of five years") that no image model can use.
+	const parts: string[] = [];
+	if (character.appearance?.trim()) parts.push(character.appearance.trim());
+
+	const section = APPEARANCE_SECTION.exec(character.description ?? '');
+	if (section?.[1]?.trim()) parts.push(section[1].trim());
+	else if (character.description?.trim()) parts.push(firstClause(character.description, 18));
+
+	// `takeWords`, not `firstClause`: a card line like `5'2" tall, slender. Dark blonde hair …` ends its
+	// first sentence at the height, and cutting there is how the hair went missing from every picture.
+	return takeWords(dedupe(stripMacros(parts.join(', '))), APPEARANCE_WORDS);
+}
+
+/**
+ * Remove SillyTavern macros from text that is about to become an image prompt.
+ *
+ * `{{user}}` / `{{char}}` are placeholders the *language* model resolves and a diffusion model treats as
+ * tokens — measured, a card line ending "lets down only for {{user}}" put the braces straight into the
+ * prompt, where they are at best noise and at worst a rendered glyph.
+ */
+function stripMacros(text: string): string {
+	return text
+		.replace(/\{\{\s*[\w-]+\s*\}\}/g, ' ')
+		.replace(/\s{2,}/g, ' ')
+		.trim();
 }
 
 /**
@@ -316,18 +377,63 @@ function appearanceTags(character?: Character | null): string {
  * dialogue, markdown, and questions ("what is Eldoria?" is not a picture).
  */
 function momentTags(messages: SceneInput['messages']): string {
-	const text = messages
-		.filter((message) => message.role !== 'system')
-		.slice(-CONTEXT_MESSAGES)
-		.map((message) => message.content.replace(/[*_`#>]/g, ' '))
+	const spoken = messages.filter((message) => message.role !== 'system');
+	const latest = (role: string) => [...spoken].reverse().find((message) => message.role === role);
+
+	// The reply first: it is the state the picture has to be in by now. Then the reader's line, which
+	// carries whatever they just changed ("unbuttons her cardigan", "we walk into the mall") and is
+	// frequently the only place the action appears.
+	const parts: string[] = [];
+	const reply = latest('assistant');
+	const ask = latest('user');
+	// The reader's line states what changed ("she unbuttons her cardigan", "we walk into the mall") and is
+	// often the only place the action is written; the reply describes what that looks like. Both, capped,
+	// in that order — the reader's sentence first so the picture is *of the beat*, not of the mood.
+	if (ask) parts.push(takeWords(proseOnly(ask.content), CONTEXT_USER_WORDS));
+	if (reply) parts.push(takeWords(proseOnly(reply.content), CONTEXT_ASSISTANT_WORDS));
+	return parts.filter(Boolean).join(', ');
+}
+
+/**
+ * Strip what a camera cannot see: markdown, quoted dialogue, questions, and hesitation speech.
+ *
+ * Roleplay replies are half dialogue, and "want to close early?" describes nothing. Asterisks are the
+ * italics convention for action, so they are removed but their words kept.
+ *
+ * `"…"` and `'…'` are speech, and they are the worst thing to leave in a prompt: measured, a reply that
+ * kept `We should...um...look at some things for James' birthday` made Anima draw a **speech bubble with
+ * words in it**. Hesitation (`...`) and single-quoted fragments go for the same reason.
+ */
+function proseOnly(content: string): string {
+	return stripMacros(
+		content
+			.replace(/[*_`#>]/g, ' ')
+			.replace(/"[^"]*"/g, ' ')
+			.replace(/'[^']{4,}'/g, ' ')
+			.split(/(?<=[.!?])\s+/)
+			.filter((sentence) => !sentence.trim().endsWith('?'))
+			.filter((sentence) => !sentence.includes('...'))
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.trim()
+	);
+}
+
+/**
+ * The first `maxWords` words, across sentence boundaries.
+ *
+ * `firstClause` stops at the first full stop, which is right for a card tag list but wrong for a reply:
+ * the action of a roleplay beat is usually in its second or third sentence ("I let my cardigan drop…"),
+ * and cutting at the first one lost it every time.
+ */
+function takeWords(text: string, maxWords: number): string {
+	return text
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, maxWords)
 		.join(' ')
-		.replace(/"[^"]*"/g, ' ')
-		.split(/(?<=[.!?])\s+/)
-		.filter((sentence) => !sentence.trim().endsWith('?'))
-		.join(' ')
-		.replace(/\s+/g, ' ')
+		.replace(/[.,;:!?]+$/, '')
 		.trim();
-	return firstClause(text, CONTEXT_WORDS);
 }
 
 /** Take whole words up to `maxWords`, stop at a sentence end if one comes first. */

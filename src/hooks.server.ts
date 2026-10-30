@@ -12,6 +12,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Handle, ServerInit } from '@sveltejs/kit';
 import { db } from '$lib/server/db/index.js';
+import { ensureShippedCharacters } from '$lib/server/cards/shipped.js';
 
 const COOKIE = 'chatchat_token';
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -72,7 +73,10 @@ function sameOrigin(event: Parameters<Handle>[0]['event']): boolean {
  * up — not after somebody happens to load a page.
  */
 export const init: ServerInit = () => {
-	db();
+	const database = db();
+	// A brand-new install has no characters; give it the one utility card (see `cards/shipped.ts`).
+	// Deliberately here and not in `openDb()`: tests build their own databases and must start empty.
+	ensureShippedCharacters(database);
 };
 
 export const handle: Handle = async ({ event, resolve }) => {

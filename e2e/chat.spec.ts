@@ -156,3 +156,32 @@ test('an image command generates a picture without asking the model', async ({ p
 	});
 	await expect(transcript(page)).not.toContainText('Stub reply to:');
 });
+
+test('the scene panel shows the prompt the next picture would use', async ({ page }) => {
+	// The screen the whole image pipeline is debugged through: it must show the *server's* prompt, not a
+	// second implementation of the rules, and it must not need ComfyUI to do it (this asserts the text).
+	test.skip(test.info().project.name !== 'desktop', 'one viewport is enough for a panel check');
+
+	await newChat(page);
+	await send(page, 'She waits by the window.');
+
+	await page.getByRole('button', { name: 'Scene' }).click();
+	const panel = page.getByRole('dialog', { name: 'Scene' });
+	await expect(panel).toBeVisible();
+
+	const prompt = panel.getByTestId('scene-prompt');
+	// Default model is Z-Image, whose dialect is prose, so the framing arrives as a sentence.
+	await expect(prompt).toContainText(/medium shot of/i);
+
+	// The look is stored with the chat and reused by every prompt: saving it must change what the panel
+	// shows, which is the only way the reader can tell a stale record from a bad model.
+	const look = panel.getByLabel('Where this story happens');
+	await look.fill('moonlit forest shrine');
+	await look.blur();
+	await expect(prompt).toContainText(/moonlit forest shrine/i);
+
+	// Escape is the native dialog's job — if the panel swallowed it, the transcript would be stuck behind
+	// an overlay that only a mouse could dismiss.
+	await page.keyboard.press('Escape');
+	await expect(panel).toBeHidden();
+});

@@ -7,13 +7,14 @@ import { db } from '$lib/server/db/index.js';
 import { deleteChat, getChat, renameChat, setChatStory } from '$lib/server/db/chats.js';
 import { getCharacter, setChatCharacter } from '$lib/server/db/characters.js';
 import { mirrorChat, removeChatDir } from '$lib/server/db/layout.js';
+import { storyPatchSchema } from '$lib/shared/story.js';
 
 const patchSchema = z.object({
 	title: z.string().trim().min(1).max(200).optional(),
 	/** `null` detaches the character; the transcript stays. */
 	characterId: z.string().min(1).nullable().optional(),
-	/** Merged into `chats.story` — today that is the scene `look` used for image prompts. */
-	story: z.object({ look: z.string().max(400).optional() }).optional()
+	/** Merged into `chats.story`: the look, the render style, the seed. Any subset. */
+	story: storyPatchSchema.optional()
 });
 
 export async function PATCH({ params, request }) {

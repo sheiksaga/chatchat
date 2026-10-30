@@ -238,6 +238,19 @@ export const KREA2_ANIME_DEFAULTS: GraphValues = {
 };
 
 /**
+ * Krea2 Anime with the community **no-strip** LoRA at full strength.
+ *
+ * The graph always had the slot (`LoraLoaderModelOnly` → `{{UNLOCKED_LORA_NAME}}`) at strength 0, so
+ * "unlocked" is one number, not a second graph file. Same 6-step recipe: measured 10.6 s at 832x1216,
+ * which is the cheapest uncensored anime option on this card.
+ */
+export const KREA2_ANIME_NSFW_DEFAULTS: GraphValues = {
+	...KREA2_ANIME_DEFAULTS,
+	UNLOCKED_LORA_STRENGTH: 1,
+	FILENAME_PREFIX: 'Krea2AnimeUnlocked'
+};
+
+/**
  * Anima **base** v1.0 — the undistilled model. It needs what distillation removes: many steps, a real
  * CFG weight and an actual negative prompt, which the turbo graphs cannot express (their unconditional
  * branch is zeroed). Hence `t2i_cfg.json`, the one graph with a `{{NEGATIVE}}` slot.
@@ -360,6 +373,12 @@ export const GRAPHS = {
 		label: 'Krea2 Anime v14 (int4)',
 		kind: 't2i',
 		defaults: KREA2_ANIME_DEFAULTS
+	},
+	'krea2-anime-nsfw-t2i': {
+		file: 'krea2_turbo_t2i',
+		label: 'Krea2 Anime Unlocked (~10 s)',
+		kind: 't2i',
+		defaults: KREA2_ANIME_NSFW_DEFAULTS
 	},
 	'anima-base-t2i': {
 		file: 't2i_cfg',
