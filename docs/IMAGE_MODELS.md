@@ -378,3 +378,210 @@ Contact sheet: `E:/tmp/sheets/prompts-v2.jpg`.
 **Timings do depend on how ComfyUI was started.** `start-comfy.bat` (auto VRAM) is the correct launcher for the
 LoRA graphs; `start-comfy-turbo.bat` (`--highvram`) thrashes with any LoRA loaded. The round-3 numbers and the
 picker labels assume auto mode and a warm model: a run right after a model switch costs 10–17 s once.
+
+# Round 5 — storyboarding and roleplay scenes, measured
+
+Two question sets, one GPU session (ComfyUI auto-VRAM, llama.cpp router resident). Six chats, 18 pictures,
+all with LOCK/seed policy or the scene builder as the app ships it. Sheets: `E:/tmp/sheets/bus-storyboard.jpg`,
+`E:/tmp/sheets/rp-mall.jpg`. Raw run data: `E:/tmp/busbench-results.json`.
+
+## Storyboard: 3 beats of one continuous action
+
+Beats: a man sprints for the bus → inside the bus the driver spots him in the mirror → the driver brakes so
+he can board. Prompt authoring came from **gemma-4-E4B-heretic** driving the shipped `Storyboard` card; the
+first beat is `SEED: RANDOM`, beats 2-3 are `LOCK`, which the app resolves to a fixed per-chat seed.
+
+|                                                | Anima Turbo                                                           | Z-Image + Mystic                             |
+| ---------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
+| Markers emitted, all 3 beats                   | 3/3                                                                   | 3/3                                          |
+| Same person across beats                       | partial — hair and build drift, beat 2 reads as a different character | yes — same face, hair and build in all three |
+| Scene carried (pavement → bus interior → door) | yes                                                                   | yes                                          |
+| Two-subject beat (driver in the mirror)        | two figures, driver small in the aisle                                | driver at the wheel, mirror visible          |
+| Wall time per picture                          | **6.3-6.4 s**                                                         | 13.6-13.8 s                                  |
+| LLM time per beat (gemma, warm)                | 1.0-1.1 s                                                             | 1.0-1.2 s                                    |
+
+What made continuity work was **not** the seed. It was the card's rule that every prompt repeats the
+established tags verbatim, plus `LOCK` keeping the noise the same. Two prompt-authoring rules were added to
+the card after this run and are why beat 2/3 show the driver at all: tag **every** person in frame (a driver
+seen in a mirror is a subject), and use `LANDSCAPE`/`CINEMA` when two people are in the shot. Before that,
+the same beats came back as a portrait of one man in an empty bus.
+
+## Roleplay: bakery → mall, SFW and NSFW
+
+Stheno for prose, the scene builder for the prompt (no markers). Beats: the bakery morning, then the mall.
+The NSFW variant asks Jess to become an exhibitionist at the mall.
+
+Measured before and after four fixes to `prompts/scene.ts` (all of which were found by this benchmark):
+
+- **Hair was missing from every prompt.** The card's `appearance` field stops at eye colour; the hair lives
+  in an `Appearance:` line deep in the description, and the builder read only the first 18 words of prose.
+  Every model therefore invented a hair colour — brown, black, platinum — from picture to picture.
+  Now an `Appearance:` line is read, and a card's own `{{user}}` macros are stripped instead of being sent
+  to the image model.
+- **The reader's line ate the whole prompt.** `moment` was "last two turns, first 45 words", so
+  "The morning rush is over and Jess is wiping down the counter…" filled it and the reply — which described
+  what Jess actually did — was cut away. A beat where her cardigan came off produced a fully dressed
+  picture. The builder now takes the reader's line (24 words) **and** the reply (32 words).
+- **Sentences were truncated at the first full stop**, which is how "5'2", slender. Dark blonde hair…" lost
+  the hair twice over.
+- **Hesitation speech reached the prompt**, and Anima answered with a speech bubble full of gibberish text
+  ("WE SHOULD...UM...LOOK AT SOME THINGS"). Sentences containing `...` and single-quoted fragments are gone,
+  and Anima now gets a 20-word action sentence instead of a paragraph.
+
+After the fixes, in the same 4 chats:
+
+|                                     | Anima Turbo                         | Z-Image + Mystic               |
+| ----------------------------------- | ----------------------------------- | ------------------------------ |
+| Same woman across the two beats     | yes (blonde, same face)             | yes (blonde, same face)        |
+| SFW beat 2 reads as a mall          | yes                                 | yes                            |
+| NSFW beat 2 shows the cardigan open | yes, plus `nsfw` in the prompt      | yes, plus `nsfw` in the prompt |
+| Wall time                           | 8.5-12.3 s                          | 14.8-19.5 s                    |
+| Prompt text that hurt               | occasional speech bubbles with text | none                           |
+
+**Still wrong, and it is the same root cause:** the count tag. `subjectTag()` reads the _card_, so a
+roleplay picture is tagged `1girl, solo` while the prose says "we walk into the mall together" — the model
+then draws the partner as a second woman, or crops him out. The legacy app solved this with a per-chat
+`present[]` list; until that exists, one-subject framing is the honest default and two-person beats will be
+a coin flip.
+
+## What to use for what
+
+- **Storyboard / multi-beat continuity:** Z-Image + Mystic. Twice the wait, and the only one that kept the
+  same face across three beats.
+- **Storyboard when speed matters:** Anima Turbo at ~6 s, accepting a re-cast character by beat 3.
+- **Roleplay scenes:** either. Anima is 2× faster and occasionally authors text into the picture; Z-Image is
+  slower and cleaner.
+
+## Round 5b — the same three beats, after reprompting
+
+The first storyboard run was bad in ways worth writing down, because none of them were the model's fault:
+the third beat contradicted the second ("he is inside the bus" → "the driver brakes so the man can get
+aboard"), the driver was never _tagged_, so he was drawn as a copy of the protagonist in a suit, and the
+braking beat named a cause instead of anything a camera can see. Fixed in three places:
+
+- **The beats** are now one shot each, and beat 2 puts him outside the bus, seen in the mirror: sprint
+  after the bus → driver glances at the mirror → driver brakes and opens the door.
+- **The card** gained the rules that were missing: every visible person is a subject with their own
+  features (a driver wears a navy uniform shirt, badge and peaked cap — never the passenger's suit); show
+  the action, not its cause (`motion blur, leaning passengers, gripping yellow handrail`, not "slams the
+  brakes"); consecutive beats must not repeat the same framing; and `LOCK` is only for a solo picture of an
+  established subject, because a frame a new person enters is a new composition.
+- **The marker grammar** learned the two words that decide whether a second character is in shot at all:
+  `OTS` and `2SHOT`, plus the shot sizes `EWS WS FS MS MCU CU ECU` and the angles `HA LA EYELEVEL`.
+- **The backend** hands the card the last drawn prompt verbatim (`PREVIOUS SHOT`, appended after the card's
+  own post-history rules). A storyboard card's only memory was its own prose; the canonical tag list is
+  what makes "remember what you wrote" into "copy what is still true".
+
+|                                              | Anima Turbo  | Z-Image + Mystic         |
+| -------------------------------------------- | ------------ | ------------------------ |
+| Driver drawn as an NPC in uniform + cap      | yes          | yes                      |
+| Two people in frame for the two-person beats | yes          | yes                      |
+| Open door / boarding visible                 | partly       | yes, clearest of the two |
+| Motion (the bus braking) visible             | no           | no                       |
+| Wall time per shot                           | **6.9-10 s** | 14.2-19 s                |
+
+Both models still compress beats: Z-Image boarded the man one beat early, and neither draws a braking bus
+as motion — a single still has no "before". The fix for that is framing (`motion blur`, a leaning crowd,
+the door), which the card now asks for, and it is the one part of a shot sheet that a text-to-image model
+serves worst.
+
+### The picture-attribution bug this uncovered
+
+The pictures in the first run were rendered above the wrong prompt. Cause: `POST /api/chat` appended the
+assistant row and never called `mirrorChat`, so `data/chats/<id>/chat.json` stopped one reply short until
+something else wrote. Anything that read the folder — a backup, an import, a script placing pictures by
+message id — saw a transcript the database did not. Fixed, with a regression test that reads the mirror
+after a streamed turn.
+
+## Round 5c — layperson prose, two models, two six-beat sequences
+
+The user's own words, no shot vocabulary (a layperson should not have to write `OTS`): a village sequence
+overhead → house → door → market → pomegranate → yen, and a beach sequence car → sand → change → onlookers.
+Krea2 Anime **Unlocked** (the no-strip LoRA at strength 1) against **Z-Image + Mystic**. Sheets:
+`E:/tmp/sheets/village.jpg`, `E:/tmp/sheets/beach.jpg`.
+
+What changed for this run — three things, all of which were the actual cause of the weak Z-Image storyboards:
+
+1. **The prompt dialect is now chosen per model, by the server.** A storyboard chat remembers its image
+   model (`story.imageWorkflow`, set when the picker changes) and the chat route appends a `PROMPT STYLE`
+   paragraph: Z-Image is told to write a 40-80 word caption and open it with what changed; Krea2/Anima are
+   told to write Danbooru tags. Before this the card demanded tags for every model, and a caption model fed
+   tag soup simply repeated the previous shot.
+2. **"Describe the state the beat ends in."** A still has no before, so "she takes off her dress and pulls
+   on a bikini" is drawn as the dress; "she stands in a red bikini, dress heaped on the ground" is drawn as
+   the bikini.
+3. **"The camera follows X" is a shot, not a beat.** Both models turned it into a face close-up until the
+   card said a camera-move beat means the subject moving through the place — back view or wide, never a
+   face.
+
+|                                                        | Krea2 Anime Unlocked                                              | Z-Image + Mystic                                    |
+| ------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------- |
+| Overhead village → house → door → market → fruit → yen | all six, in order                                                 | all six, in order                                   |
+| "Camera follows her" beat                              | wide street with stalls, subject mid-scene                        | back view down the lane, wide                       |
+| Character held across the sequence                     | no — kimono white → navy → pale, and beat 5/6 are different women | yes — same blue floral kimono and hair in beats 3-5 |
+| NSFW progression obeyed                                | yes — dress off, bikini on, crowd looking                         | partly — implies it; beat 3 keeps the dress on      |
+| Style                                                  | photoreal, not anime, despite the checkpoint                      | photoreal                                           |
+| Wall time                                              | ~20 s/shot                                                        | ~14 s/shot                                          |
+
+**Verdict.** Z-Image + Mystic is the better _storyboarder_ — faster, more consistent, and it reads a
+caption like text — but it will not fully obey an undressing beat. Krea2 Anime Unlocked is the one that
+obeys explicit progression, at 20 s, with wardrobe drift and a photoreal look that the "anime" label does
+not describe. Neither draws a beat it cannot see: if a still cannot show it (a bus braking, a door
+opening mid-swing), describe the state it leaves behind.
+
+## Round 6 — three sequences, three unclipped models, no shot tags
+
+Same three stories for **Krea2 Unlocked**, **Z-Image + Mystic** and **Anima Turbo** (no unlock LoRA exists
+for Anima; it turned out not to need one). Village (sfw, 6 beats), beach (semi, 4 beats), clothing store
+(explicit, 6 beats) — all written as plain prose, the way a layperson describes a shot. Sheets:
+`E:/tmp/sheets/r6-village.jpg`, `r6-beach.jpg`, `r6-store.jpg`.
+
+|                                  | Krea2 Unlocked                             | Z-Image + Mystic                   | Anima Turbo                 |
+| -------------------------------- | ------------------------------------------ | ---------------------------------- | --------------------------- |
+| Village, all six beats           | yes                                        | yes                                | yes                         |
+| "Camera follows her" beat        | street with stalls                         | back view down the lane            | extreme wide, figure tiny   |
+| Character held across a sequence | no (kimono changes, faces differ)          | mostly (same kimono 3-5)           | yes (same girl throughout)  |
+| Beach: undressing obeyed         | yes                                        | partly (dress pulled open, bikini) | yes (bikini)                |
+| Store: naked under the coat      | yes                                        | yes                                | yes                         |
+| Store: bystanders reacting       | two men walking past                       | a man with his hand to his face    | no — became a rear close-up |
+| Artifacts                        | style flips photoreal ↔ anime mid-sequence | one split/diptych frame            | beat compression            |
+| Per shot                         | ~20.5 s                                    | ~14 s                              | **~7.4 s**                  |
+
+**Verdict.** For explicit progression, **Krea2 Unlocked and Z-Image + Mystic both comply**; the difference
+is style stability (Krea2 flips) versus obedience at the edges (Z-Image would not fully undress on the beach
+but did in the changing room). **Anima Turbo is the fastest and the most consistent character** — 7.4 s is
+three times faster than Krea2 — but it compresses beats: a beat about onlookers became a rear close-up, and
+one "camera follows" beat became a landscape with a tiny figure. At this speed it is the right model for a
+long storyboard, with the caveat that beats about _other people_ need the people named in the beat itself.
+
+Nothing here needs a shot tag from the user: the card picks the framing, and every one of these sequences was
+written as plain prose.
+
+## Why the art style used to flip mid-sequence (2026-10-30)
+
+Krea2 Unlocked is the model whose style drifted most, and round 7 measured exactly where it came from. The
+storyboard writer was **asked** to keep the render style in every prompt:
+
+```
+PROMPT STYLE (this chat draws with a Danbooru model): … RENDER STYLE (keep it in every prompt): anime screenshot, cel shading, clean lineart, vivid color
+```
+
+It complied on most beats and dropped the tail on the two beats that describe an explicit act
+(`hand on crotch`, `masturbating penis to completion`) — the tags sit at the end of a long tag list, and the
+end is the first thing the writer loses when it switches into a descriptive register. Measured on the drawn
+frames, those two are exactly the soft/painterly ones: mean horizontal lineart contrast 12.7 and 13.1
+against 17-18 for the frames that carried the tags. The seed, the model and the LoRA were the same.
+
+The fix is not a better instruction, it is not asking at all: `pinStyle()` in `shared/story.ts` appends the
+chat's style tags server-side in `POST /api/images` whenever the prompt does not already carry them (and
+`story.style` is chat-level, set by the Scene panel). Pinned, the same sequence drew six anime frames with
+no flip. Rules that follow:
+
+- **Never let a model own the art style.** Either the graph carries it (a style LoRA) or the server appends it.
+- `pinStyle()` is idempotent — the first style tag counts as "already pinned", so a writer that includes the
+  tags does not get them twice.
+- The Scene panel's `style` therefore means "how this chat draws", for every path: chip, "of this moment",
+  edit and the scene preview.
+- Untested second-order effect: `UNLOCKED_LORA_STRENGTH: 1` (a Civitai no-strip LoRA) may pull explicit beats
+  toward a photographic look on its own. If a pinned frame still reads realistic, drop the strength to 0.5
+  before blaming the prompt — that needs a GPU run to settle.

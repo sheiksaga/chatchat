@@ -74,7 +74,7 @@ data/
   cards/<characterId>.png         card avatars, shared by every chat using the card
   chats/<chatId>/
     chat.json                     transcript + images + character, pretty-printed
-    story.json                    the scene record (`look`, …)
+    story.json                    the scene record (look, style, seed)
     images/<imageId>.png          pictures, next to the chat that made them
   images/<imageId>.png            pictures that belong to no chat
 ```
@@ -83,9 +83,30 @@ The database is the source of truth; `chat.json` / `story.json` are **mirrors**,
 after every write (`db/layout.ts`). Delete a mirror and the app still works — the next write recreates
 it. `file` columns store paths relative to `data/`, so copying the folder anywhere changes nothing.
 
+### The scene record
+
+A diffusion model has no memory, so everything a picture needs that the prose does not say lives in
+`chats.story` (and its mirror): `look` (where and when the story happens), `style` (how it renders) and
+`seed` (what keeps a face recognisable between scenes). `shared/story.ts` owns the shape; `parseStory`
+accepts anything, so a chat stored before a field existed loads with that field defaulted instead of
+failing the page.
+
+Three readers, one shape: `prompts/scene.ts` turns it into prompt text (tags for Anima and the flat
+dialects, a sentence for Z-Image), `ScenePanel.svelte` edits it and previews the resulting prompt, and
+`ImageTools` sends the seed with "of this moment". The seed deliberately does **not** travel with a
+plain regenerate — that button exists to vary a picture.
+
+`autoImages` is the one tri-state field: `true` / `false` is the user's own answer, `null` (the default)
+means "ask the card", so a chat with the shipped `Storyboard` card auto-draws its `[[IMG]]` markers and
+every other chat keeps them as click-to-generate chips. The Scene drawer toggles it; resolving `null`
+happens at the call site, not in the schema.
+
 At startup (`hooks.server.ts` → `init`) the server opens the database once, which runs the one-time
 layout work: pictures written by older versions move into their chat's folder, rows whose bytes are gone
-are dropped, and every mirror is rewritten.
+are dropped, and every mirror is rewritten. The same hook seeds the app's one shipped card,
+`Storyboard` (`src/lib/server/cards/shipped.ts`), and only when the characters table is **completely
+empty** — so a user who deleted it does not get it back, and a user with their own imports never sees
+a second copy appear.
 
 ## Database
 

@@ -69,6 +69,7 @@ Rules:
 | `Toaster`        | `src/lib/components/ui/toast/Toaster.svelte` + `src/lib/stores/toast.svelte.ts` | mount once in `+layout.svelte`; call `toasts.success/error/info`. One short line, bottom-right, self-dismissing.                                                                                                                                  |
 | `MessageActions` | `src/lib/components/chat/MessageActions.svelte`                                 | copy / edit / retry / delete for one turn.                                                                                                                                                                                                        |
 | `SidebarTrigger` | `src/lib/components/chat/SidebarTrigger.svelte`                                 | the phone's way into the sidebar drawer. Goes first in a page header; hides itself at `md`+, where the sidebar is a column again.                                                                                                                 |
+| `ScenePanel`     | `src/lib/components/chat/ScenePanel.svelte`                                     | the scene drawer (look / style / seed, plus the auto-draw toggle for storyboard chats) with a live preview of the prompt the selected image model would receive. A `<dialog>`, so Escape and the focus trap are free.                             |
 
 `ConfirmDialog` and `Toaster` are in `src/lib/components/ui/**`, which eslint relaxes
 (`svelte/no-navigation-without-resolve` off) — that is for vendored shadcn source, not a licence to put
@@ -83,7 +84,7 @@ div.flex.h-dvh.overflow-hidden            ← the shell; sets --content-size / -
 ├─ div[data-testid=sidebar]                the Sidebar: drawer below `md`, first column at `md`+
 └─ div.flex-1.overflow-y-auto             ← the ONLY page scroll container (not <html>)
    └─ page root — `{#key data.chat.id}` → ChatView (one instance per chat)
-      ├─ header                            ← SidebarTrigger, title, provider + model picker, Look
+      ├─ header                            ← SidebarTrigger, title, provider + model picker, Scene
       ├─ section/div flex-1 overflow-y-auto (chat transcript)
       │    └─ per message: body → [[IMG]] chips → ImageBlock(s) for that message
       └─ div                                docked area: errors → ImageTools controls → Composer
@@ -101,6 +102,10 @@ div.flex.h-dvh.overflow-hidden            ← the shell; sets --content-size / -
   Open state lives in `sidebar-drawer.svelte.ts` (context, not a module singleton).
 - **The composer is docked, never floating.** It is a sibling of the transcript's scroll container, so
   it cannot cover the last line of a reply.
+- **The scene record is a drawer, not a page.** `ScenePanel` opens from the chat header as a `<dialog>`
+  anchored to the inline end, full height, with the conversation readable behind it. One scroll
+  container: the panel body. The prompt preview inside it must not add a second one — a nested scroller
+  cuts the prompt in half, which is the one thing that panel exists to show whole.
 - **Pictures are content, not chrome.** They are rendered inside the transcript, under the message that
   drew them (`ImageBlock`: prompt above, image below — see `placeImages` in `shared/image.ts`). Only the
   _controls_ (`ImageTools`: model, "of this moment", progress, the viewer and mask overlays) are docked.

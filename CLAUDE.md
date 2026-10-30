@@ -75,6 +75,8 @@ UI rules — type scale, motion, primitives, layout contract: `docs/UI.md`.
 | Change DB shape                               | `src/lib/server/db/migrations.ts` — append only, bump `user_version`                                                |
 | Change a message/chat shape                   | `src/lib/shared/message.ts` / `chat.ts` → run `npm run check`                                                       |
 | Change chat UI                                | `src/routes/chat/[id]/ChatView.svelte`, `src/lib/components/chat/*.svelte`                                          |
+| Change the scene record (look/style/seed)     | `src/lib/shared/story.ts` (shape) + `src/lib/components/chat/ScenePanel.svelte` (drawer, prompt preview)            |
+| The shipped character card                    | `src/lib/server/cards/shipped.ts`                                                                                   |
 | Add a picture block / change where images sit | `src/lib/components/images/ImageBlock.svelte` + `placeImages()` in `src/lib/shared/image.ts`                        |
 | Styles / theme tokens                         | `src/app.css` (`:root`, `.dark`, `@theme` — the type scale and animations live there)                               |
 | Add a UI primitive (dialog, toast, …)         | `src/lib/components/ui/<name>/`, see `docs/UI.md` §3                                                                |
@@ -139,9 +141,19 @@ _notes/                PLAN.md, TODO.md, REWRITE_RESEARCH.md, model notes
   `/chat/[id]` therefore runs once, for the first chat — which is how one chat's pictures followed you into
   the next. `+page.svelte` is a `{#key data.chat.id}` wrapper around `ChatView.svelte`; keep per-chat state
   inside that key rather than resetting it by hand.
+- **`storySchema.partial()` applies the `.default()`s**, so a PATCH of just the look arrives as
+  `{ look, style: 'none', seed: null }` and silently clears the seed. `storyPatchSchema` is written out by
+  hand for that reason; its test pins it.
+- **The per-chat seed belongs to "of this moment" only.** Regenerate must not use it, or every retry
+  returns the identical picture and the button looks broken.
 - A picture belongs to a turn via `images.message_id`. Every generation path must send one (chip → its own
   message, "of this moment"/`/image` → the newest reply, edit/inpaint → the source picture's message), or
   the picture has to be placed by `created_at` in `placeImages()`.
+- **The marker's AR/SHOT/SEED words are a real token set, not free text.** `PORTRAIT`/`SQUARE`/
+  `LANDSCAPE`/`CINEMA`, `CLOSE`…`POV` and `SEED: RANDOM|LOCK` are the ComfyInject vocabulary cards are
+  written against; `shared/image.ts` classifies segments 2–4 by content (so order does not matter) and
+  maps each word to a framing tag. Before that, `MEDIUM` was pasted into the prompt as a junk tag. When
+  adding a word, add it to `src/lib/shared/marker.spec.ts`, which pins the shipped card's own examples.
 - **Icon-button accessible names are the e2e contract.** `getByRole(..., { name })` matches a substring, so
   `aria-label="Rename chat"` makes a sidebar row match `{ name: 'chat' }`. Keep names short, put the
   sentence in `title` (see `docs/UI.md` §6).
